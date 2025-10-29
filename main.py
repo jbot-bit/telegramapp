@@ -95,6 +95,13 @@ class InviteRequest(BaseModel):
     to_username: str
 
 
+class ProfileUpdateRequest(BaseModel):
+    user_id: int
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    profile_picture_url: Optional[str] = None
+
+
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def serve_webapp():
@@ -212,51 +219,97 @@ async def get_profile(user_id: int):
 
 @app.post("/api/vouch")
 async def create_vouch(vouch_request: VouchRequest):
-    """Create a new vouch"""
+    """Create a new vouch - works for both existing users and pending vouches"""
     try:
         # Sanitize message
         message = None
         if vouch_request.message:
             message = sanitize_message(vouch_request.message)
 
-        # Get target user by username
-        async with db.pool.acquire() as conn:
-            target_user = await conn.fetchrow(
-                "SELECT telegram_user_id FROM users WHERE username = $1",
-                vouch_request.to_username.replace("@", "")
-            )
-
-        if not target_user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        to_user_id = target_user["telegram_user_id"]
-
-        # Check self-vouch
-        if to_user_id == vouch_request.from_user_id:
-            raise HTTPException(status_code=400, detail="Cannot vouch for yourself")
-
-        # Create vouch
+        # Create vouch (works for both existing and non-existing users)
+        target_username = vouch_request.to_username.replace("@", "")
         result = await db.create_vouch(
             from_user_id=vouch_request.from_user_id,
-            to_user_id=to_user_id,
+            to_username=target_username,
             message=message
         )
 
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
 
-        # Get updated profile
-        profile = await get_profile(to_user_id)
+        # Check if this was a pending vouch or immediate vouch
+        if result.get("is_pending"):
+            # Pending vouch for user who hasn't joined yet
+            return {
+                "success": True,
+                "vouch": result,
+                "pending": True,
+                "message": f"Vouch recorded for @{target_username}. They'll receive it when they join!"
+            }
+        else:
+            # Immediate vouch for existing user
+            to_user_id = result.get("to_user_id")
+            
+            # Get updated profile
+            profile = await get_profile(to_user_id)
 
-        return {
-            "success": True,
-            "vouch": result,
-            "profile": profile
-        }
+            return {
+                "success": True,
+                "vouch": result,
+                "pending": False,
+                "profile": profile
+            }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error creating vouch: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/profile/update")
+async def update_profile(profile_update: ProfileUpdateRequest):
+    """Update user profile information"""
+    try:
+        async with db.pool.acquire() as conn:
+            # Build update query dynamically
+            updates = []
+            params = []
+            param_count = 1
+            
+            if profile_update.bio is not None:
+                updates.append(f"bio = ${param_count}")
+                params.append(profile_update.bio[:500])  # Limit bio to 500 chars
+                param_count += 1
+            
+            if profile_update.location is not None:
+                updates.append(f"location = ${param_count}")
+                params.append(profile_update.location[:100])  # Limit location to 100 chars
+                param_count += 1
+            
+            if profile_update.profile_picture_url is not None:
+                updates.append(f"profile_picture_url = ${param_count}")
+                params.append(profile_update.profile_picture_url)
+                param_count += 1
+            
+            if not updates:
+                raise HTTPException(status_code=400, detail="No fields to update")
+            
+            params.append(profile_update.user_id)
+            query = f"UPDATE users SET {', '.join(updates)} WHERE telegram_user_id = ${param_count} RETURNING *"
+            
+            updated_user = await conn.fetchrow(query, *params)
+            
+            if not updated_user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            return {
+                "success": True,
+                "user": dict(updated_user)
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -466,5 +519,5 @@ async def update_admin_config(admin_id: int, key: str, value: str):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", "8080"))
+    port = int(os.getenv("PORT", "5000"))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

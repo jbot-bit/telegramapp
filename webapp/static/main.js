@@ -122,6 +122,34 @@ function setupEventListeners() {
             document.getElementById('profileModal').classList.remove('active');
         });
     }
+    
+    // Edit Profile button
+    const editProfileBtn = document.getElementById('editProfileBtn');
+    if (editProfileBtn) {
+        editProfileBtn.addEventListener('click', openEditProfileModal);
+    }
+    
+    // Edit Profile Modal close
+    const closeEditModal = document.getElementById('closeEditModal');
+    if (closeEditModal) {
+        closeEditModal.addEventListener('click', () => {
+            document.getElementById('editProfileModal').classList.remove('active');
+        });
+    }
+    
+    // Edit Profile form
+    const editProfileForm = document.getElementById('editProfileForm');
+    if (editProfileForm) {
+        editProfileForm.addEventListener('submit', handleProfileUpdate);
+    }
+    
+    // Bio character counter
+    const editBio = document.getElementById('editBio');
+    if (editBio) {
+        editBio.addEventListener('input', () => {
+            document.getElementById('bioCharCount').textContent = editBio.value.length;
+        });
+    }
 
     // Check URL parameters for deep linking
     const urlParams = new URLSearchParams(window.location.search);
@@ -189,6 +217,22 @@ async function loadProfileTab() {
         const rankName = getRankName(data.user.rank);
         rankBadge.textContent = `${rankEmoji} ${rankName}`;
         rankBadge.className = `rank-badge ${data.user.rank}`;
+        
+        // Update bio if exists
+        if (data.user.bio) {
+            document.getElementById('bioText').textContent = data.user.bio;
+            document.getElementById('profileBio').style.display = 'block';
+        } else {
+            document.getElementById('profileBio').style.display = 'none';
+        }
+        
+        // Update location if exists
+        if (data.user.location) {
+            document.getElementById('locationText').textContent = data.user.location;
+            document.getElementById('profileLocation').style.display = 'block';
+        } else {
+            document.getElementById('profileLocation').style.display = 'none';
+        }
 
         // Update stats
         document.getElementById('vouchCount').textContent = data.user.total_vouches;
@@ -659,6 +703,65 @@ function showLoading(show) {
         overlay.classList.add('active');
     } else {
         overlay.classList.remove('active');
+    }
+}
+
+// Profile Editing
+async function openEditProfileModal() {
+    try {
+        // Fetch current profile
+        const response = await fetch(`${API_BASE}/api/profile/${currentUser.telegram_user_id}`);
+        const data = await response.json();
+        
+        // Populate form with current values
+        document.getElementById('editBio').value = data.user.bio || '';
+        document.getElementById('editLocation').value = data.user.location || '';
+        document.getElementById('bioCharCount').textContent = (data.user.bio || '').length;
+        
+        // Show modal
+        document.getElementById('editProfileModal').classList.add('active');
+    } catch (error) {
+        console.error('Error opening edit profile:', error);
+        showToast('Failed to load profile for editing', 'error');
+    }
+}
+
+async function handleProfileUpdate(e) {
+    e.preventDefault();
+    
+    const bio = document.getElementById('editBio').value.trim();
+    const location = document.getElementById('editLocation').value.trim();
+    
+    try {
+        showLoading(true);
+        
+        const response = await fetch(`${API_BASE}/api/profile/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_id: currentUser.telegram_user_id,
+                bio: bio || null,
+                location: location || null
+            })
+        });
+        
+        if (response.ok) {
+            showToast('✅ Profile updated successfully!', 'success');
+            document.getElementById('editProfileModal').classList.remove('active');
+            
+            // Reload profile tab
+            await loadProfileTab();
+        } else {
+            const error = await response.json();
+            showToast(error.detail || 'Failed to update profile', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating profile:', error);
+        showToast('Failed to update profile', 'error');
+    } finally {
+        showLoading(false);
     }
 }
 

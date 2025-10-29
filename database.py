@@ -47,6 +47,9 @@ class Database:
                     username TEXT,
                     first_name TEXT,
                     last_name TEXT,
+                    bio TEXT,
+                    profile_picture_url TEXT,
+                    location TEXT,
                     first_seen_at TIMESTAMP DEFAULT NOW(),
                     total_vouches INTEGER DEFAULT 0,
                     rank TEXT DEFAULT 'unverified',
@@ -56,18 +59,36 @@ class Database:
                     last_streak_date DATE
                 )
             """)
+            
+            # Add new profile columns if they don't exist (for existing databases)
+            try:
+                await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT")
+                await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture_url TEXT")
+                await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS location TEXT")
+            except Exception as e:
+                logger.warning(f"Profile columns update warning (might be expected): {e}")
 
-            # Vouches table
+            # Vouches table - supports pending vouches for users who haven't joined yet
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS vouches (
                     id SERIAL PRIMARY KEY,
                     from_user_id BIGINT REFERENCES users(telegram_user_id),
                     to_user_id BIGINT REFERENCES users(telegram_user_id),
+                    to_username TEXT,
                     message TEXT,
                     created_at TIMESTAMP DEFAULT NOW(),
-                    approved BOOLEAN DEFAULT TRUE
+                    approved BOOLEAN DEFAULT TRUE,
+                    is_pending BOOLEAN DEFAULT FALSE
                 )
             """)
+            
+            # Add columns if they don't exist (for existing databases)
+            try:
+                await conn.execute("ALTER TABLE vouches ADD COLUMN IF NOT EXISTS to_username TEXT")
+                await conn.execute("ALTER TABLE vouches ADD COLUMN IF NOT EXISTS is_pending BOOLEAN DEFAULT FALSE")
+                await conn.execute("ALTER TABLE vouches ALTER COLUMN to_user_id DROP NOT NULL")
+            except Exception as e:
+                logger.warning(f"Schema update warning (might be expected): {e}")
 
             # Bot config table
             await conn.execute("""
@@ -130,11 +151,21 @@ class Database:
             )
 
             if user:
-                # Update last active
-                await conn.execute(
-                    "UPDATE users SET last_active_at = NOW() WHERE telegram_user_id = $1",
-                    telegram_user_id
-                )
+                # Update last active and username if provided
+                if username:
+                    old_username = user["username"]
+                    await conn.execute(
+                        "UPDATE users SET last_active_at = NOW(), username = $2 WHERE telegram_user_id = $1",
+                        telegram_user_id, username
+                    )
+                    # Process pending vouches if username changed or was newly set
+                    if old_username != username:
+                        await self._process_pending_vouches(telegram_user_id, username)
+                else:
+                    await conn.execute(
+                        "UPDATE users SET last_active_at = NOW() WHERE telegram_user_id = $1",
+                        telegram_user_id
+                    )
                 return dict(user)
             else:
                 # Create new user
@@ -150,6 +181,10 @@ class Database:
                     "username": username
                 })
 
+                # Process pending vouches for this user (if they have a username)
+                if username:
+                    await self._process_pending_vouches(telegram_user_id, username)
+
                 return dict(user)
 
     async def get_user(self, telegram_user_id: int) -> Optional[Dict[str, Any]]:
@@ -160,6 +195,60 @@ class Database:
                 telegram_user_id
             )
             return dict(user) if user else None
+
+    async def _process_pending_vouches(self, telegram_user_id: int, username: str):
+        """Convert pending vouches to actual vouches when a user signs up or changes username"""
+        async with self.pool.acquire() as conn:
+            # Normalize username for case-insensitive matching
+            username_normalized = username.lower() if username else None
+            if not username_normalized:
+                return
+            
+            # Find all pending vouches for this username (case-insensitive)
+            pending_vouches = await conn.fetch(
+                "SELECT * FROM vouches WHERE LOWER(to_username) = $1 AND is_pending = TRUE",
+                username_normalized
+            )
+            
+            if not pending_vouches:
+                return
+            
+            logger.info(f"Processing {len(pending_vouches)} pending vouches for @{username}")
+            
+            # Convert each pending vouch to a real vouch
+            for vouch in pending_vouches:
+                # Update the vouch to link to the actual user
+                await conn.execute("""
+                    UPDATE vouches 
+                    SET to_user_id = $1, is_pending = FALSE 
+                    WHERE id = $2
+                """, telegram_user_id, vouch["id"])
+            
+            # Update the user's total vouch count
+            vouch_count = len(pending_vouches)
+            await conn.execute(
+                "UPDATE users SET total_vouches = total_vouches + $1 WHERE telegram_user_id = $2",
+                vouch_count, telegram_user_id
+            )
+            
+            # Get updated vouch count and recalculate rank
+            total_vouches = await conn.fetchval(
+                "SELECT total_vouches FROM users WHERE telegram_user_id = $1",
+                telegram_user_id
+            )
+            
+            new_rank = self.calculate_rank(total_vouches)
+            await conn.execute(
+                "UPDATE users SET rank = $1 WHERE telegram_user_id = $2",
+                new_rank, telegram_user_id
+            )
+            
+            # Log event
+            await self.log_event("pending_vouches_processed", telegram_user_id, {
+                "username": username,
+                "vouches_processed": vouch_count,
+                "new_rank": new_rank
+            })
 
     async def get_all_users(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get all users with pagination"""
@@ -195,62 +284,100 @@ class Database:
             })
 
     # Vouch operations
-    async def create_vouch(self, from_user_id: int, to_user_id: int, message: str = None) -> Dict[str, Any]:
-        """Create a new vouch"""
+    async def create_vouch(self, from_user_id: int, to_user_id: int = None, to_username: str = None, message: str = None) -> Dict[str, Any]:
+        """Create a new vouch - supports both existing users and pending vouches for users who haven't joined yet"""
         async with self.pool.acquire() as conn:
-            # Check if vouch already exists
-            existing = await conn.fetchrow(
-                "SELECT * FROM vouches WHERE from_user_id = $1 AND to_user_id = $2",
-                from_user_id, to_user_id
-            )
+            # Normalize username (case-insensitive, remove @)
+            if to_username:
+                to_username = to_username.replace("@", "").lower()
+            
+            # If username is provided, try to find the user (case-insensitive)
+            if to_username and not to_user_id:
+                user = await conn.fetchrow(
+                    "SELECT telegram_user_id FROM users WHERE LOWER(username) = $1",
+                    to_username
+                )
+                if user:
+                    to_user_id = user["telegram_user_id"]
+            
+            # Check if vouch already exists (either by ID or username)
+            if to_user_id:
+                existing = await conn.fetchrow(
+                    "SELECT * FROM vouches WHERE from_user_id = $1 AND to_user_id = $2",
+                    from_user_id, to_user_id
+                )
+            elif to_username:
+                existing = await conn.fetchrow(
+                    "SELECT * FROM vouches WHERE from_user_id = $1 AND LOWER(to_username) = $2 AND is_pending = TRUE",
+                    from_user_id, to_username
+                )
+            else:
+                return {"error": "Must provide either to_user_id or to_username"}
 
             if existing:
                 return {"error": "You already vouched for this user"}
 
-            # Create vouch
-            vouch = await conn.fetchrow("""
-                INSERT INTO vouches (from_user_id, to_user_id, message)
-                VALUES ($1, $2, $3)
-                RETURNING *
-            """, from_user_id, to_user_id, message)
+            # Check for self-vouch (only if we have to_user_id)
+            if to_user_id and to_user_id == from_user_id:
+                return {"error": "You cannot vouch for yourself"}
 
-            # Update total vouches count
-            await conn.execute(
-                "UPDATE users SET total_vouches = total_vouches + 1 WHERE telegram_user_id = $1",
-                to_user_id
-            )
+            # Create vouch (either confirmed or pending)
+            if to_user_id:
+                # User exists - create confirmed vouch
+                vouch = await conn.fetchrow("""
+                    INSERT INTO vouches (from_user_id, to_user_id, to_username, message, is_pending)
+                    VALUES ($1, $2, $3, $4, FALSE)
+                    RETURNING *
+                """, from_user_id, to_user_id, to_username if to_username else None, message)
 
-            # Get updated vouch count
-            vouch_count = await conn.fetchval(
-                "SELECT total_vouches FROM users WHERE telegram_user_id = $1",
-                to_user_id
-            )
+                # Update total vouches count
+                await conn.execute(
+                    "UPDATE users SET total_vouches = total_vouches + 1 WHERE telegram_user_id = $1",
+                    to_user_id
+                )
 
-            # Calculate and update rank
-            new_rank = self.calculate_rank(vouch_count)
-            current_rank = await conn.fetchval(
-                "SELECT rank FROM users WHERE telegram_user_id = $1",
-                to_user_id
-            )
+                # Get updated vouch count
+                vouch_count = await conn.fetchval(
+                    "SELECT total_vouches FROM users WHERE telegram_user_id = $1",
+                    to_user_id
+                )
 
-            if new_rank != current_rank:
-                await self.update_user_rank(to_user_id, new_rank)
+                # Calculate and update rank
+                new_rank = self.calculate_rank(vouch_count)
+                current_rank = await conn.fetchval(
+                    "SELECT rank FROM users WHERE telegram_user_id = $1",
+                    to_user_id
+                )
 
-            # Check for mutual vouch
-            mutual = await conn.fetchrow(
-                "SELECT * FROM vouches WHERE from_user_id = $1 AND to_user_id = $2",
-                to_user_id, from_user_id
-            )
+                if new_rank != current_rank:
+                    await self.update_user_rank(to_user_id, new_rank)
 
-            if mutual:
-                await self.log_event("mutual_vouch", from_user_id, {
-                    "other_user": to_user_id
+                # Check for mutual vouch
+                mutual = await conn.fetchrow(
+                    "SELECT * FROM vouches WHERE from_user_id = $1 AND to_user_id = $2",
+                    to_user_id, from_user_id
+                )
+
+                if mutual:
+                    await self.log_event("mutual_vouch", from_user_id, {
+                        "other_user": to_user_id
+                    })
+
+                await self.log_event("vouch_created", from_user_id, {
+                    "to_user": to_user_id,
+                    "vouch_count": vouch_count
                 })
+            else:
+                # User doesn't exist - create pending vouch
+                vouch = await conn.fetchrow("""
+                    INSERT INTO vouches (from_user_id, to_user_id, to_username, message, is_pending)
+                    VALUES ($1, NULL, $2, $3, TRUE)
+                    RETURNING *
+                """, from_user_id, to_username, message)
 
-            await self.log_event("vouch_created", from_user_id, {
-                "to_user": to_user_id,
-                "vouch_count": vouch_count
-            })
+                await self.log_event("pending_vouch_created", from_user_id, {
+                    "to_username": to_username,
+                })
 
             return dict(vouch)
 

@@ -173,69 +173,63 @@ async def vouch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if message:
         message = sanitize_message(message)
 
-    # Get target user by username
-    target_user = await db.pool.fetchrow(
-        "SELECT telegram_user_id FROM users WHERE username = $1",
-        target_username
-    )
-
-    if not target_user:
-        await update.message.reply_text(
-            f"User @{target_username} not found. They need to use /start first."
-        )
-        return
-
-    target_user_id = target_user["telegram_user_id"]
-
-    if target_user_id == user.id:
-        await update.message.reply_text("You cannot vouch for yourself!")
-        return
-
-    # Create vouch
-    result = await db.create_vouch(user.id, target_user_id, message)
+    # Create vouch (works for both existing and non-existing users)
+    result = await db.create_vouch(user.id, to_username=target_username, message=message)
 
     if "error" in result:
         await update.message.reply_text(f"❌ {result['error']}")
         return
 
-    # Get updated user data
-    target_data = await db.get_user(target_user_id)
-    rank_emoji = db.get_rank_emoji(target_data["rank"])
+    # Check if this was a pending vouch or immediate vouch
+    if result.get("is_pending"):
+        # Pending vouch for user who hasn't joined yet
+        await update.message.reply_text(
+            f"✅ Vouch recorded for @{target_username}!\n\n"
+            f"They haven't used the bot yet, but your vouch will be counted when they join.",
+            parse_mode="Markdown"
+        )
+    else:
+        # Immediate vouch for existing user
+        target_user_id = result.get("to_user_id")
+        
+        # Get updated user data
+        target_data = await db.get_user(target_user_id)
+        rank_emoji = db.get_rank_emoji(target_data["rank"])
 
-    await update.message.reply_text(
-        f"✅ Vouch recorded for @{target_username}!\n\n"
-        f"They now have {rank_emoji} **{target_data['total_vouches']}** vouches.",
-        parse_mode="Markdown"
-    )
+        await update.message.reply_text(
+            f"✅ Vouch recorded for @{target_username}!\n\n"
+            f"They now have {rank_emoji} **{target_data['total_vouches']}** vouches.",
+            parse_mode="Markdown"
+        )
 
-    # Check if this triggered a rank up
-    rank_events = await db.pool.fetch(
-        "SELECT * FROM rank_events WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
-        target_user_id
-    )
+        # Check if this triggered a rank up
+        rank_events = await db.pool.fetch(
+            "SELECT * FROM rank_events WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
+            target_user_id
+        )
 
-    if rank_events and (rank_events[0]["created_at"]).timestamp() > (result["created_at"]).timestamp() - 5:
-        # Rank up just happened
-        new_rank_name = db.get_rank_name(target_data["rank"])
-        new_rank_emoji = db.get_rank_emoji(target_data["rank"])
+        if rank_events and (rank_events[0]["created_at"]).timestamp() > (result["created_at"]).timestamp() - 5:
+            # Rank up just happened
+            new_rank_name = db.get_rank_name(target_data["rank"])
+            new_rank_emoji = db.get_rank_emoji(target_data["rank"])
 
-        # Send notification to target user
-        try:
-            webapp_url = f"{WEBHOOK_URL}?view=profile&id={target_user_id}"
-            keyboard = [[
-                InlineKeyboardButton("🎉 View My Profile", web_app=WebAppInfo(url=webapp_url)),
-                InlineKeyboardButton("Share Achievement", switch_inline_query=f"I just reached {new_rank_emoji} {new_rank_name} on Vouch Portal!")
-            ]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            # Send notification to target user
+            try:
+                webapp_url = f"{WEBHOOK_URL}?view=profile&id={target_user_id}"
+                keyboard = [[
+                    InlineKeyboardButton("🎉 View My Profile", web_app=WebAppInfo(url=webapp_url)),
+                    InlineKeyboardButton("Share Achievement", switch_inline_query=f"I just reached {new_rank_emoji} {new_rank_name} on Vouch Portal!")
+                ]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
 
-            await context.bot.send_message(
-                chat_id=target_user_id,
-                text=f"🎉 **Congratulations!**\n\nYou've been promoted to {new_rank_emoji} **{new_rank_name}**!\n\nYour trust score just increased.",
-                reply_markup=reply_markup,
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            logger.error(f"Failed to send rank-up notification: {e}")
+                await context.bot.send_message(
+                    chat_id=target_user_id,
+                    text=f"🎉 **Congratulations!**\n\nYou've been promoted to {new_rank_emoji} **{new_rank_name}**!\n\nYour trust score just increased.",
+                    reply_markup=reply_markup,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send rank-up notification: {e}")
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
