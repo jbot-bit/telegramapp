@@ -130,6 +130,9 @@ async def health_check():
 @app.post("/webhook")
 async def webhook(request: Request):
     """Handle Telegram webhook updates"""
+    if not bot_app:
+        return {"status": "error", "message": "Bot not initialized"}
+    
     try:
         data = await request.json()
         update = Update.de_json(data, bot_app.bot)
@@ -222,7 +225,7 @@ async def create_vouch(vouch_request: VouchRequest):
     """Create a new vouch - works for both existing users and pending vouches"""
     try:
         # Sanitize message
-        message = None
+        message = ""
         if vouch_request.message:
             message = sanitize_message(vouch_request.message)
 
@@ -231,7 +234,7 @@ async def create_vouch(vouch_request: VouchRequest):
         result = await db.create_vouch(
             from_user_id=vouch_request.from_user_id,
             to_username=target_username,
-            message=message
+            message=message if message else ""
         )
 
         if "error" in result:
@@ -250,8 +253,11 @@ async def create_vouch(vouch_request: VouchRequest):
             # Immediate vouch for existing user
             to_user_id = result.get("to_user_id")
             
+            if not to_user_id:
+                raise HTTPException(status_code=400, detail="Invalid user ID")
+            
             # Get updated profile
-            profile = await get_profile(to_user_id)
+            profile = await get_profile(int(to_user_id))
 
             return {
                 "success": True,
@@ -269,6 +275,9 @@ async def create_vouch(vouch_request: VouchRequest):
 @app.post("/api/profile/update")
 async def update_profile(profile_update: ProfileUpdateRequest):
     """Update user profile information"""
+    if not db.pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
     try:
         async with db.pool.acquire() as conn:
             # Build update query dynamically
@@ -316,6 +325,9 @@ async def update_profile(profile_update: ProfileUpdateRequest):
 @app.post("/api/invite")
 async def send_invite(invite_request: InviteRequest):
     """Send vouch invite to another user"""
+    if not db.pool or not bot_app:
+        raise HTTPException(status_code=503, detail="Service not available")
+    
     try:
         # Check rate limit
         can_send = await db.can_send_invite(

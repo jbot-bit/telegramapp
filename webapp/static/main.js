@@ -24,34 +24,36 @@ async function initializeApp() {
     try {
         showLoading(true);
 
-        // Get user from Telegram WebApp
+        // Get user from Telegram WebApp - REQUIRED
         const telegramUser = tg.initDataUnsafe?.user;
 
         if (!telegramUser) {
-            // Development fallback
-            console.warn('No Telegram user data available. Using demo mode.');
-            currentUser = {
-                telegram_user_id: 123456789,
-                username: 'demo_user',
-                first_name: 'Demo',
-                rank: 'verified',
-                total_vouches: 5
-            };
-        } else {
-            // Fetch user profile from backend
-            const response = await fetch(`${API_BASE}/api/profile/${telegramUser.id}`);
-            if (response.ok) {
-                const data = await response.json();
-                currentUser = data.user;
-            } else {
-                throw new Error('Failed to load profile');
-            }
+            showLoading(false);
+            document.getElementById('app').innerHTML = `
+                <div style="padding: 40px; text-align: center;">
+                    <h2>⚠️ Telegram Required</h2>
+                    <p>This app must be opened through Telegram.</p>
+                    <p>Please open it via the Telegram bot.</p>
+                </div>
+            `;
+            return;
         }
 
-        // Check if user is admin
-        const adminId = 123456789; // Replace with actual admin ID
-        if (currentUser.telegram_user_id === adminId) {
-            document.querySelector('.admin-only').style.display = 'block';
+        // Fetch user profile from backend
+        const response = await fetch(`${API_BASE}/api/profile/${telegramUser.id}`);
+        if (!response.ok) {
+            throw new Error(`Failed to load profile: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        currentUser = data.user;
+
+        // Check if user is admin (get from environment or set dynamically)
+        const adminElements = document.querySelectorAll('.admin-only');
+        if (adminElements.length > 0) {
+            // You can implement admin check here if needed
+            // For now, hide admin sections by default
+            adminElements.forEach(el => el.style.display = 'none');
         }
 
         // Setup UI
@@ -62,8 +64,14 @@ async function initializeApp() {
         showLoading(false);
     } catch (error) {
         console.error('Initialization error:', error);
-        showToast('Failed to load app. Please try again.', 'error');
         showLoading(false);
+        document.getElementById('app').innerHTML = `
+            <div style="padding: 40px; text-align: center;">
+                <h2>❌ Error Loading App</h2>
+                <p>${error.message}</p>
+                <p>Please try again or contact support.</p>
+            </div>
+        `;
     }
 }
 
@@ -222,6 +230,11 @@ async function loadProfileTab() {
 
     try {
         const response = await fetch(`${API_BASE}/api/profile/${currentUser.telegram_user_id}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const data = await response.json();
 
         // Update profile header
