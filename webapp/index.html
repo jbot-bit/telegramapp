@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>🤝 Vouch Portal</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>🤝 Vouch Portal</h1>
+            <div id="userBadge" class="user-badge"></div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="profile">My Profile</button>
+            <button class="tab-btn" data-tab="vouch">Vouch</button>
+            <button class="tab-btn" data-tab="community">Community</button>
+            <button class="tab-btn admin-only" data-tab="insights" style="display: none;">Insights</button>
+        </nav>
+
+        <!-- Tab Content -->
+        <main class="content">
+            <!-- MY PROFILE TAB -->
+            <div id="profile-tab" class="tab-content active">
+                <div class="profile-card">
+                    <div class="profile-header">
+                        <div class="avatar" id="profileAvatar">👤</div>
+                        <div class="profile-info">
+                            <h2 id="profileName">Loading...</h2>
+                            <div class="rank-badge" id="profileRank"></div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="vouchCount">0</div>
+                            <div class="stat-label">Vouches Received</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="vouchGiven">0</div>
+                            <div class="stat-label">Vouches Given</div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="progress-section">
+                        <div class="progress-header">
+                            <span>Progress to Next Rank</span>
+                            <span id="progressText">3/6</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <button class="btn btn-primary pulse" id="requestVouchBtn">
+                            💬 Request Vouch
+                        </button>
+                        <button class="btn btn-secondary" id="shareProfileBtn">
+                            📤 Share Profile
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Received Vouches -->
+                <div class="section">
+                    <h3>💎 Received Vouches</h3>
+                    <div id="receivedVouches" class="vouch-list"></div>
+                </div>
+
+                <!-- Given Vouches -->
+                <div class="section">
+                    <h3>🤝 Vouches You Gave</h3>
+                    <div id="givenVouches" class="vouch-list"></div>
+                </div>
+            </div>
+
+            <!-- VOUCH SOMEONE TAB -->
+            <div id="vouch-tab" class="tab-content">
+                <div class="vouch-form-card">
+                    <h2>Give a Vouch</h2>
+                    <p class="subtitle">Support someone in the community</p>
+
+                    <form id="vouchForm">
+                        <div class="form-group">
+                            <label for="targetUsername">Username</label>
+                            <input
+                                type="text"
+                                id="targetUsername"
+                                placeholder="@username"
+                                required
+                                autocomplete="off"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="vouchMessage">Message (Optional)</label>
+                            <textarea
+                                id="vouchMessage"
+                                placeholder="Why do you vouch for them?"
+                                maxlength="120"
+                                rows="3"
+                            ></textarea>
+                            <div class="char-count">
+                                <span id="charCount">0</span>/120
+                            </div>
+                        </div>
+
+                        <div class="disclaimer">
+                            ⚠️ All feedback is community-based and non-verifiable.<br>
+                            Keep comments respectful — inappropriate language is filtered automatically.
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-large" id="submitVouchBtn">
+                            ✅ Submit Vouch
+                        </button>
+                    </form>
+
+                    <!-- Recent Vouches Given -->
+                    <div class="recent-vouches">
+                        <h4>Recent Vouches</h4>
+                        <div id="recentVouches" class="mini-vouch-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COMMUNITY TAB -->
+            <div id="community-tab" class="tab-content">
+                <div class="search-section">
+                    <input
+                        type="search"
+                        id="communitySearch"
+                        placeholder="🔍 Search users..."
+                        class="search-input"
+                    >
+                </div>
+
+                <div class="filters">
+                    <button class="filter-btn active" data-filter="all">All Users</button>
+                    <button class="filter-btn" data-filter="top_tier">👑 Top-Tier</button>
+                    <button class="filter-btn" data-filter="endorsed">🛡 Endorsed</button>
+                    <button class="filter-btn" data-filter="trusted">🔷 Trusted</button>
+                </div>
+
+                <div id="communityGrid" class="community-grid"></div>
+            </div>
+
+            <!-- INSIGHTS TAB (Admin Only) -->
+            <div id="insights-tab" class="tab-content">
+                <div class="insights-container">
+                    <h2>📊 Analytics Dashboard</h2>
+
+                    <!-- Overview Stats -->
+                    <div class="stats-overview">
+                        <div class="insight-card">
+                            <div class="insight-value" id="totalUsers">0</div>
+                            <div class="insight-label">Total Users</div>
+                        </div>
+                        <div class="insight-card">
+                            <div class="insight-value" id="activeUsers24h">0</div>
+                            <div class="insight-label">Active (24h)</div>
+                        </div>
+                        <div class="insight-card">
+                            <div class="insight-value" id="totalVouches">0</div>
+                            <div class="insight-label">Total Vouches</div>
+                        </div>
+                        <div class="insight-card">
+                            <div class="insight-value" id="newSignups">0</div>
+                            <div class="insight-label">New (7d)</div>
+                        </div>
+                    </div>
+
+                    <!-- Rank Distribution -->
+                    <div class="section">
+                        <h3>Rank Distribution</h3>
+                        <div id="rankDistribution" class="rank-chart"></div>
+                    </div>
+
+                    <!-- Top Contributors -->
+                    <div class="section">
+                        <h3>🏆 Top Helpers (This Week)</h3>
+                        <div id="topHelpers" class="leaderboard-list"></div>
+                    </div>
+
+                    <!-- Most Vouched -->
+                    <div class="section">
+                        <h3>⭐ Most Vouched Users</h3>
+                        <div id="mostVouched" class="leaderboard-list"></div>
+                    </div>
+
+                    <!-- System Health -->
+                    <div class="section">
+                        <h3>System Health</h3>
+                        <div class="health-indicators">
+                            <div class="health-item">
+                                <span class="health-status status-ok">●</span>
+                                <span>Database Connected</span>
+                            </div>
+                            <div class="health-item">
+                                <span class="health-status status-ok">●</span>
+                                <span>Webhook Active</span>
+                            </div>
+                            <div class="health-item">
+                                <span class="health-status status-ok">●</span>
+                                <span>Bot Running</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-disclaimer">
+                This app promotes peer-based trust.<br>
+                Do not rely on it for financial or legal verification.
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modals -->
+    <!-- Profile Modal -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modalProfileContent"></div>
+        </div>
+    </div>
+
+    <!-- Success Toast -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <script src="/static/main.js"></script>
+</body>
+</html>
