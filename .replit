@@ -6,8 +6,8 @@ channel = "stable-24_05"
 packages = ["libxcrypt", "postgresql"]
 
 [deployment]
-run = ["sh", "-c", "python main.py"]
-deploymentTarget = "cloudrun"
+run = ["python", "main.py"]
+deploymentTarget = "autoscale"
 
 [agent]
 integrations = ["python_database:1.0.0"]
