@@ -4,6 +4,7 @@ Handles PostgreSQL connections and schema management
 """
 import asyncpg
 import os
+import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import logging
@@ -409,10 +410,12 @@ class Database:
     async def log_event(self, event_type: str, user_id: int = None, metadata: Dict = None):
         """Log an analytics event"""
         async with self.pool.acquire() as conn:
+            # Convert metadata dict to JSON string for JSONB column
+            metadata_json = json.dumps(metadata) if metadata else None
             await conn.execute("""
                 INSERT INTO events (event_type, user_id, metadata)
                 VALUES ($1, $2, $3)
-            """, event_type, user_id, metadata)
+            """, event_type, user_id, metadata_json)
 
     async def get_analytics_summary(self) -> Dict[str, Any]:
         """Get analytics summary for dashboard"""

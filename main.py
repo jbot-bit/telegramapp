@@ -38,10 +38,16 @@ async def lifespan(app: FastAPI):
     # Connect to database
     await db.connect()
 
-    # Initialize bot
-    bot_app = create_bot_application()
-    await bot_app.initialize()
-    await bot_app.start()
+    # Initialize bot (allow app to start even if bot fails)
+    try:
+        bot_app = create_bot_application()
+        await bot_app.initialize()
+        await bot_app.start()
+        logger.info("Telegram bot initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Telegram bot: {e}")
+        logger.warning("Application will continue without bot functionality")
+        bot_app = None
 
     logger.info("Application started successfully")
 
@@ -51,8 +57,11 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down application...")
 
     if bot_app:
-        await bot_app.stop()
-        await bot_app.shutdown()
+        try:
+            await bot_app.stop()
+            await bot_app.shutdown()
+        except Exception as e:
+            logger.error(f"Error shutting down bot: {e}")
 
     await db.disconnect()
 
