@@ -114,6 +114,21 @@ function setupEventListeners() {
             filterCommunity();
         });
     });
+    
+    // View toggle buttons
+    document.querySelectorAll('.view-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            const view = e.target.dataset.view;
+            const grid = document.getElementById('communityGrid');
+            if (view === 'list') {
+                grid.classList.add('list-view');
+            } else {
+                grid.classList.remove('list-view');
+            }
+        });
+    });
 
     // Modal close
     const closeModal = document.querySelector('.close');

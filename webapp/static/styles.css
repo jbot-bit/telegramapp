@@ -460,16 +460,47 @@ body {
 /* Community Grid */
 .search-section {
     margin-bottom: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
 }
 
 .search-input {
-    width: 100%;
+    flex: 1;
     padding: 0.8rem 1rem;
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
     font-size: 0.95rem;
+}
+
+.view-toggle {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 0.25rem;
+}
+
+.view-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.view-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.view-btn.active {
+    background: var(--accent-blue);
+    color: white;
 }
 
 .filters {
@@ -544,6 +575,42 @@ body {
 .community-vouches {
     font-size: 0.75rem;
     color: var(--text-secondary);
+}
+
+/* List View */
+.community-grid.list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.community-grid.list-view .community-card {
+    display: flex;
+    align-items: center;
+    padding: 0.8rem 1rem;
+    text-align: left;
+    gap: 1rem;
+}
+
+.community-grid.list-view .community-avatar {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.community-grid.list-view .community-name {
+    flex: 1;
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.community-grid.list-view .community-rank {
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+.community-grid.list-view .community-vouches {
+    font-size: 0.8rem;
+    margin-left: auto;
 }
 
 /* Insights/Analytics */

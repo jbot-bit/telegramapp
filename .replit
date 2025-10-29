@@ -11,6 +11,7 @@ deploymentTarget = "cloudrun"
 
 [agent]
 integrations = ["python_database:1.0.0"]
+expertMode = true
 
 [workflows]
 runButton = "Project"
@@ -39,3 +40,11 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 41205
+externalPort = 3001
+
+[[ports]]
+localPort = 42821
+externalPort = 3000
