@@ -374,6 +374,43 @@ async def create_vouch(vouch_request: VouchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.put("/api/vouches/{vouch_id}")
+async def update_vouch(vouch_id: int, vouch_update: dict):
+    """Update an existing vouch message - only the creator can edit"""
+    if not db.pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        from_user_id = vouch_update.get("from_user_id")
+        new_message = vouch_update.get("message", "")
+        
+        if not from_user_id:
+            raise HTTPException(status_code=400, detail="from_user_id is required")
+        
+        # Sanitize the new message
+        sanitized_message = sanitize_message(new_message) if new_message else ""
+        
+        # Update the vouch
+        result = await db.update_vouch(vouch_id, from_user_id, sanitized_message)
+        
+        if "error" in result:
+            # Return 404 if vouch not found, 403 if permission denied
+            if result["error"] == "Vouch not found":
+                raise HTTPException(status_code=404, detail=result["error"])
+            else:
+                raise HTTPException(status_code=403, detail=result["error"])
+        
+        return {
+            "success": True,
+            "vouch": result
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating vouch: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/profile/update")
 async def update_profile(profile_update: ProfileUpdateRequest):
     """Update user profile information"""

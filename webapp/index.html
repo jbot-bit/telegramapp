@@ -352,6 +352,32 @@
         </div>
     </div>
 
+    <!-- Edit Vouch Modal -->
+    <div id="editVouchModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeEditVouchModal">&times;</span>
+            <h2>✏️ Edit Vouch</h2>
+            <form id="editVouchForm">
+                <div class="form-group">
+                    <label for="editVouchMessage">Vouch Message</label>
+                    <textarea
+                        id="editVouchMessage"
+                        placeholder="Update your vouch message..."
+                        maxlength="120"
+                        rows="4"
+                    ></textarea>
+                    <div class="char-count">
+                        <span id="editVouchCharCount">0</span>/120
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-large">
+                    💾 Save Changes
+                </button>
+            </form>
+        </div>
+    </div>
+
     <!-- Mutual Vouch CTA Toast -->
     <div id="mutualVouchToast" class="mutual-vouch-toast">
         <div class="mutual-vouch-content">

@@ -97,6 +97,7 @@ class Database:
                 await conn.execute("ALTER TABLE vouches ADD COLUMN IF NOT EXISTS is_pending BOOLEAN DEFAULT FALSE")
                 await conn.execute("ALTER TABLE vouches ALTER COLUMN to_user_id DROP NOT NULL")
                 await conn.execute("ALTER TABLE vouches ADD COLUMN IF NOT EXISTS vote_type TEXT DEFAULT 'positive'")
+                await conn.execute("ALTER TABLE vouches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP")
                 await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS positive_votes INTEGER DEFAULT 0")
                 await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS negative_votes INTEGER DEFAULT 0")
                 await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rating_percentage FLOAT DEFAULT 100.0")
@@ -436,6 +437,37 @@ class Database:
                 })
 
             return dict(vouch)
+
+    async def update_vouch(self, vouch_id: int, from_user_id: int, new_message: str) -> Dict[str, Any]:
+        """Update an existing vouch message - only the person who created it can edit"""
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
+            # Verify the vouch exists and belongs to the requesting user
+            vouch = await conn.fetchrow(
+                "SELECT * FROM vouches WHERE id = $1",
+                vouch_id
+            )
+            
+            if not vouch:
+                return {"error": "Vouch not found"}
+            
+            if vouch["from_user_id"] != from_user_id:
+                return {"error": "You can only edit your own vouches"}
+            
+            # Update the vouch message and set updated_at timestamp
+            updated_vouch = await conn.fetchrow("""
+                UPDATE vouches 
+                SET message = $1, updated_at = NOW()
+                WHERE id = $2
+                RETURNING *
+            """, new_message, vouch_id)
+            
+            await self.log_event("vouch_updated", from_user_id, {
+                "vouch_id": vouch_id,
+                "to_user": vouch["to_user_id"]
+            })
+            
+            return dict(updated_vouch)
 
     async def get_vouches_for_user(self, telegram_user_id: int) -> List[Dict[str, Any]]:
         """Get all vouches received by a user"""

@@ -265,6 +265,28 @@ function setupEventListeners() {
         telegramShareBtn.addEventListener('click', shareOnTelegram);
     }
     
+    // Edit Vouch Modal close
+    const closeEditVouchModal = document.getElementById('closeEditVouchModal');
+    if (closeEditVouchModal) {
+        closeEditVouchModal.addEventListener('click', () => {
+            document.getElementById('editVouchModal').classList.remove('active');
+        });
+    }
+    
+    // Edit Vouch form
+    const editVouchForm = document.getElementById('editVouchForm');
+    if (editVouchForm) {
+        editVouchForm.addEventListener('submit', handleEditVouchSubmit);
+    }
+    
+    // Edit vouch message character counter
+    const editVouchMessage = document.getElementById('editVouchMessage');
+    if (editVouchMessage) {
+        editVouchMessage.addEventListener('input', () => {
+            document.getElementById('editVouchCharCount').textContent = editVouchMessage.value.length;
+        });
+    }
+    
     // Return vouch button in mutual vouch toast
     const returnVouchBtn = document.getElementById('returnVouchBtn');
     if (returnVouchBtn) {
@@ -397,7 +419,7 @@ async function loadProfileTab() {
 
         // Render vouches
         renderVouches('receivedVouches', data.vouches_received);
-        renderVouches('givenVouches', data.vouches_given);
+        renderVouches('givenVouches', data.vouches_given, true); // true = show edit button
     } catch (error) {
         console.error('Error loading profile:', error);
         showToast('Failed to load profile data', 'error');
@@ -438,7 +460,7 @@ function updateProgressBar(current, next, percentage) {
     }
 }
 
-function renderVouches(containerId, vouches) {
+function renderVouches(containerId, vouches, showEditButton = false) {
     const container = document.getElementById(containerId);
 
     if (!vouches || vouches.length === 0) {
@@ -450,15 +472,18 @@ function renderVouches(containerId, vouches) {
         const isPending = vouch.is_pending || !vouch.username;
         const displayName = isPending ? `@${vouch.to_username}` : `@${vouch.username || vouch.first_name}`;
         const statusBadge = isPending ? '<span style="color: #888; font-size: 11px;">⏳ Pending</span>' : '';
+        const canEdit = showEditButton && currentUser && vouch.from_user_id === currentUser.telegram_user_id;
+        const editedBadge = vouch.updated_at ? '<span style="color: #888; font-size: 11px; margin-left: 8px;">(edited)</span>' : '';
         
         return `
-        <div class="vouch-item ${isPending ? 'pending' : ''}">
+        <div class="vouch-item ${isPending ? 'pending' : ''}" data-vouch-id="${vouch.id}">
             <div class="vouch-header">
                 <span class="vouch-user">${displayName}</span>
-                <span class="vouch-date">${formatDate(vouch.created_at)}</span>
+                <span class="vouch-date">${formatDate(vouch.created_at)}${editedBadge}</span>
             </div>
             ${statusBadge ? `<div style="margin-top: 4px;">${statusBadge}</div>` : ''}
             ${vouch.message ? `<div class="vouch-message">"${vouch.message}"</div>` : ''}
+            ${canEdit ? `<button class="btn-edit" onclick="openEditVouchModal(${vouch.id}, '${(vouch.message || '').replace(/'/g, "\\'")}')">✏️ Edit</button>` : ''}
         </div>
         `;
     }).join('');
@@ -491,15 +516,17 @@ function renderRecentVouches(vouches) {
         const isPending = vouch.is_pending || !vouch.username;
         const displayName = isPending ? `@${vouch.to_username}` : `@${vouch.username || vouch.first_name}`;
         const statusBadge = isPending ? '<span style="color: #888; font-size: 11px;">⏳ Pending</span>' : '';
+        const editedBadge = vouch.updated_at ? '<span style="color: #888; font-size: 11px; margin-left: 8px;">(edited)</span>' : '';
         
         return `
-        <div class="vouch-item ${isPending ? 'pending' : ''}">
+        <div class="vouch-item ${isPending ? 'pending' : ''}" data-vouch-id="${vouch.id}">
             <div class="vouch-header">
                 <span class="vouch-user">${displayName}</span>
-                <span class="vouch-date">${formatDate(vouch.created_at)}</span>
+                <span class="vouch-date">${formatDate(vouch.created_at)}${editedBadge}</span>
             </div>
             ${statusBadge ? `<div style="margin-top: 4px;">${statusBadge}</div>` : ''}
             ${vouch.message ? `<div class="vouch-message">"${vouch.message}"</div>` : ''}
+            <button class="btn-edit" onclick="openEditVouchModal(${vouch.id}, '${(vouch.message || '').replace(/'/g, "\\'")}')">✏️ Edit</button>
         </div>
         `;
     }).join('');
@@ -1178,6 +1205,69 @@ async function handleProfileUpdate(e) {
     } catch (error) {
         console.error('Error updating profile:', error);
         showToast('Failed to update profile', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Edit Vouch functionality
+let currentEditVouchId = null;
+
+function openEditVouchModal(vouchId, currentMessage) {
+    currentEditVouchId = vouchId;
+    
+    // Populate form with current message
+    const textarea = document.getElementById('editVouchMessage');
+    textarea.value = currentMessage || '';
+    document.getElementById('editVouchCharCount').textContent = currentMessage.length;
+    
+    // Show modal
+    document.getElementById('editVouchModal').classList.add('active');
+}
+
+async function handleEditVouchSubmit(e) {
+    e.preventDefault();
+    
+    if (!currentEditVouchId) {
+        showToast('Error: No vouch selected', 'error');
+        return;
+    }
+    
+    const message = document.getElementById('editVouchMessage').value.trim();
+    
+    try {
+        showLoading(true);
+        
+        const response = await fetch(`${API_BASE}/api/vouches/${currentEditVouchId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                from_user_id: currentUser.telegram_user_id,
+                message: message
+            })
+        });
+        
+        if (response.ok) {
+            showToast('✅ Vouch updated successfully!', 'success');
+            document.getElementById('editVouchModal').classList.remove('active');
+            
+            // Reload the current tab to show updated vouch
+            if (currentTab === 'profile') {
+                await loadProfileTab();
+            } else if (currentTab === 'vouch') {
+                await loadVouchTab();
+            }
+            
+            currentEditVouchId = null;
+        } else {
+            const error = await response.json();
+            showToast(error.detail || 'Failed to update vouch', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating vouch:', error);
+        showToast('Failed to update vouch', 'error');
     } finally {
         showLoading(false);
     }
