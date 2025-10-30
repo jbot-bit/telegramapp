@@ -395,12 +395,12 @@ class Database:
             return [dict(vouch) for vouch in vouches]
 
     async def get_vouches_by_user(self, telegram_user_id: int) -> List[Dict[str, Any]]:
-        """Get all vouches given by a user"""
+        """Get all vouches given by a user (including pending ones)"""
         async with self.pool.acquire() as conn:
             vouches = await conn.fetch("""
                 SELECT v.*, u.username, u.first_name, u.rank
                 FROM vouches v
-                JOIN users u ON v.to_user_id = u.telegram_user_id
+                LEFT JOIN users u ON v.to_user_id = u.telegram_user_id
                 WHERE v.from_user_id = $1
                 ORDER BY v.created_at DESC
             """, telegram_user_id)

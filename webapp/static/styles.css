@@ -363,6 +363,11 @@ body {
     background: var(--bg-card);
     padding: 1rem;
     border-radius: 8px;
+}
+
+.vouch-item.pending {
+    opacity: 0.7;
+    border-left: 3px solid var(--accent-amber);
     border-left: 3px solid var(--accent-blue);
 }
 

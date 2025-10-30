@@ -291,15 +291,22 @@ function renderVouches(containerId, vouches) {
         return;
     }
 
-    container.innerHTML = vouches.map(vouch => `
-        <div class="vouch-item">
+    container.innerHTML = vouches.map(vouch => {
+        const isPending = vouch.is_pending || !vouch.username;
+        const displayName = isPending ? `@${vouch.to_username}` : `@${vouch.username || vouch.first_name}`;
+        const statusBadge = isPending ? '<span style="color: #888; font-size: 11px;">⏳ Pending</span>' : '';
+        
+        return `
+        <div class="vouch-item ${isPending ? 'pending' : ''}">
             <div class="vouch-header">
-                <span class="vouch-user">@${vouch.username || vouch.first_name}</span>
+                <span class="vouch-user">${displayName}</span>
                 <span class="vouch-date">${formatDate(vouch.created_at)}</span>
             </div>
+            ${statusBadge ? `<div style="margin-top: 4px;">${statusBadge}</div>` : ''}
             ${vouch.message ? `<div class="vouch-message">"${vouch.message}"</div>` : ''}
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // Vouch Tab
@@ -325,14 +332,22 @@ function renderRecentVouches(vouches) {
         return;
     }
 
-    container.innerHTML = vouches.map(vouch => `
-        <div class="vouch-item">
+    container.innerHTML = vouches.map(vouch => {
+        const isPending = vouch.is_pending || !vouch.username;
+        const displayName = isPending ? `@${vouch.to_username}` : `@${vouch.username || vouch.first_name}`;
+        const statusBadge = isPending ? '<span style="color: #888; font-size: 11px;">⏳ Pending</span>' : '';
+        
+        return `
+        <div class="vouch-item ${isPending ? 'pending' : ''}">
             <div class="vouch-header">
-                <span class="vouch-user">@${vouch.username || vouch.first_name}</span>
+                <span class="vouch-user">${displayName}</span>
                 <span class="vouch-date">${formatDate(vouch.created_at)}</span>
             </div>
+            ${statusBadge ? `<div style="margin-top: 4px;">${statusBadge}</div>` : ''}
+            ${vouch.message ? `<div class="vouch-message">"${vouch.message}"</div>` : ''}
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 async function handleVouchSubmit(e) {
