@@ -406,6 +406,9 @@ async def get_analytics(user_id: Optional[int] = None):
 @app.get("/api/viral/summary")
 async def get_viral_summary():
     """Get viral growth summary"""
+    if not db.pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
     try:
         async with db.pool.acquire() as conn:
             # Vouches today
@@ -442,6 +445,9 @@ async def get_viral_summary():
 @app.get("/api/search")
 async def search_users(q: str, limit: int = 20):
     """Search users by username or name"""
+    if not db.pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
     try:
         async with db.pool.acquire() as conn:
             users = await conn.fetch("""
@@ -497,6 +503,9 @@ async def get_admin_config(admin_id: int):
     """Get admin configuration (admin only)"""
     if admin_id != ADMIN_ID:
         raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    if not db.pool:
+        raise HTTPException(status_code=503, detail="Database not available")
 
     try:
         async with db.pool.acquire() as conn:
@@ -513,6 +522,9 @@ async def update_admin_config(admin_id: int, key: str, value: str):
     """Update admin configuration (admin only)"""
     if admin_id != ADMIN_ID:
         raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    if not db.pool:
+        raise HTTPException(status_code=503, detail="Database not available")
 
     try:
         async with db.pool.acquire() as conn:
