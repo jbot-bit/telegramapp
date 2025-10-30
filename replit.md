@@ -144,6 +144,50 @@ Preferred communication style: Simple, everyday language.
    - Footer disclaimer clarifying non-financial nature of the system
    - Positive, community-focused language throughout
 
+**Major Social Engagement Features** (October 30, 2025):
+
+1. **Streak Tracking System**:
+   - Automatic daily streak calculation based on user activity
+   - Visual streak indicators with fire emoji (🔥) on profiles
+   - Highlighted streak cards with golden gradient for active streaks
+   - Encourages daily engagement and habit formation
+
+2. **Community Activity Feed**:
+   - Real-time feed showing recent vouches and rank-ups
+   - Community tab reorganized with 3 views: Activity, Users, Leaderboards
+   - Displays recent community actions to increase visibility
+   - Motivates users to participate and stay active
+
+3. **Multi-Type Leaderboards**:
+   - **Most Vouched**: Users with the most total vouches received
+   - **Top Givers**: Users who give the most vouches (community helpers)
+   - **Rising Stars**: Users gaining the most vouches this week
+   - **Streak Leaders**: Users with the longest consecutive activity streaks
+   - Medal indicators (🥇🥈🥉) for top 3 positions
+   - Clickable leaderboard items to view user profiles
+
+4. **Enhanced User Profiles**:
+   - Streak indicators displayed in profile stats
+   - Quick "Vouch for this user" action button
+   - Better error handling for failed profile loads
+   - Responsive design improvements
+
+5. **Referral Statistics API**:
+   - Backend API to track referral signups
+   - Shows how many users joined via each user's referral link
+   - Enables future referral dashboard features
+
+6. **Improved Error Handling**:
+   - Proper HTTP status code checking across all API calls
+   - User-friendly error messages with toasts
+   - Graceful degradation when APIs fail
+   - Loading states for better UX
+
+7. **Database Optimizations**:
+   - Efficient queries for activity feeds and leaderboards
+   - Indexed queries for faster performance
+   - Automatic streak calculation on user activity
+
 ### Deployment Architecture
 
 **Hosting**: Replit (or any cloud platform supporting Python/FastAPI)
