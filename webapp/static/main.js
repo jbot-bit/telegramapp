@@ -305,6 +305,19 @@ async function loadProfileTab() {
 }
 
 function updateProgressBar(current, next, percentage) {
+    // Handle max rank achieved (strictly null or undefined, not 0)
+    if (next == null) {
+        document.getElementById('progressText').textContent = '👑 Max rank achieved!';
+        document.getElementById('progressFill').style.width = '100%';
+        
+        // Remove pulse effect for max rank users
+        const requestBtn = document.getElementById('requestVouchBtn');
+        if (requestBtn) {
+            requestBtn.classList.remove('pulse');
+        }
+        return;
+    }
+    
     const remaining = next - current;
     let progressText = `${current}/${next}`;
     
