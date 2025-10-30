@@ -173,6 +173,32 @@ function setupEventListeners() {
             document.getElementById('bioCharCount').textContent = editBio.value.length;
         });
     }
+    
+    // Share Modal close
+    const closeShareModal = document.getElementById('closeShareModal');
+    if (closeShareModal) {
+        closeShareModal.addEventListener('click', () => {
+            document.getElementById('shareModal').classList.remove('active');
+        });
+    }
+    
+    // Copy link button
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+    if (copyLinkBtn) {
+        copyLinkBtn.addEventListener('click', copyShareLink);
+    }
+    
+    // Telegram share button
+    const telegramShareBtn = document.getElementById('telegramShareBtn');
+    if (telegramShareBtn) {
+        telegramShareBtn.addEventListener('click', shareOnTelegram);
+    }
+    
+    // Return vouch button in mutual vouch toast
+    const returnVouchBtn = document.getElementById('returnVouchBtn');
+    if (returnVouchBtn) {
+        returnVouchBtn.addEventListener('click', handleReturnVouch);
+    }
 
     // Check URL parameters for deep linking
     const urlParams = new URLSearchParams(window.location.search);
@@ -279,8 +305,24 @@ async function loadProfileTab() {
 }
 
 function updateProgressBar(current, next, percentage) {
-    document.getElementById('progressText').textContent = `${current}/${next}`;
+    const remaining = next - current;
+    let progressText = `${current}/${next}`;
+    
+    // Add progress pressure message if close to next rank
+    if (remaining > 0 && remaining <= 3) {
+        progressText = `Only ${remaining} to reach next rank!`;
+    }
+    
+    document.getElementById('progressText').textContent = progressText;
     document.getElementById('progressFill').style.width = `${percentage}%`;
+    
+    // Add/remove pulse effect on Request Vouch button based on verification status
+    const requestBtn = document.getElementById('requestVouchBtn');
+    if (requestBtn && current < 3) {
+        requestBtn.classList.add('pulse');
+    } else if (requestBtn) {
+        requestBtn.classList.remove('pulse');
+    }
 }
 
 function renderVouches(containerId, vouches) {
@@ -828,6 +870,57 @@ document.addEventListener('visibilitychange', () => {
         loadProfileTab();
     }
 });
+
+// Share Modal Functions
+async function copyShareLink() {
+    const shareLink = document.getElementById('shareLink').value;
+    try {
+        await navigator.clipboard.writeText(shareLink);
+        showToast('✅ Link copied to clipboard!', 'success');
+    } catch (error) {
+        console.error('Error copying link:', error);
+        showToast('Failed to copy link', 'error');
+    }
+}
+
+function shareOnTelegram() {
+    const modal = document.getElementById('shareModal');
+    const shareText = modal.dataset.shareText;
+    const shareLink = modal.dataset.shareLink;
+    
+    if (tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
+        tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`);
+    } else {
+        tg.openLink(`https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(shareText)}`);
+    }
+    
+    modal.classList.remove('active');
+}
+
+// Mutual Vouch CTA
+let mutualVouchUsername = null;
+
+function showMutualVouchCTA(username) {
+    mutualVouchUsername = username;
+    document.getElementById('mutualVouchMessage').textContent = `💬 @${username} vouched for you! Return the favor?`;
+    
+    const toast = document.getElementById('mutualVouchToast');
+    toast.classList.add('show');
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 8000);
+}
+
+function handleReturnVouch() {
+    if (mutualVouchUsername) {
+        document.getElementById('mutualVouchToast').classList.remove('active');
+        switchTab('vouch');
+        document.getElementById('targetUsername').value = mutualVouchUsername;
+        document.getElementById('targetUsername').focus();
+        mutualVouchUsername = null;
+    }
+}
 
 // Telegram WebApp theme
 if (tg.colorScheme === 'dark') {

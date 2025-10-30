@@ -860,6 +860,80 @@ body {
     to { transform: rotate(360deg); }
 }
 
+/* Share Modal */
+.share-modal {
+    max-width: 400px;
+}
+
+.share-content {
+    text-align: center;
+}
+
+.share-content h2 {
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.share-content p {
+    margin-bottom: 1.5rem;
+    color: var(--text-secondary);
+}
+
+.share-link-container {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.share-link-input {
+    flex: 1;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-family: monospace;
+}
+
+/* Mutual Vouch Toast */
+.mutual-vouch-toast {
+    position: fixed;
+    bottom: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    padding: 1rem;
+    border-radius: 12px;
+    border: 2px solid var(--accent-blue);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    min-width: 300px;
+    transition: bottom 0.3s ease;
+}
+
+.mutual-vouch-toast.show {
+    bottom: 100px;
+}
+
+.mutual-vouch-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.mutual-vouch-content p {
+    margin: 0;
+    font-size: 0.95rem;
+    text-align: center;
+}
+
+.btn-small {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
 /* Responsive Design */
 @media (min-width: 768px) {
     .content {

@@ -285,6 +285,34 @@
         </div>
     </div>
 
+    <!-- Share Modal -->
+    <div id="shareModal" class="modal">
+        <div class="modal-content share-modal">
+            <span class="close" id="closeShareModal">&times;</span>
+            <div class="share-content">
+                <h2 id="shareTitle">🎉 Share Your Achievement!</h2>
+                <p id="shareMessage">You've reached a new rank! Share your progress with the community.</p>
+                
+                <div class="share-link-container">
+                    <input type="text" id="shareLink" readonly class="share-link-input">
+                    <button class="btn btn-secondary" id="copyLinkBtn">📋 Copy</button>
+                </div>
+                
+                <button class="btn btn-primary btn-large" id="telegramShareBtn">
+                    📤 Share on Telegram
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mutual Vouch CTA Toast -->
+    <div id="mutualVouchToast" class="mutual-vouch-toast">
+        <div class="mutual-vouch-content">
+            <p id="mutualVouchMessage">💬 Return the favor?</p>
+            <button class="btn btn-small" id="returnVouchBtn">Vouch Back</button>
+        </div>
+    </div>
+
     <!-- Success Toast -->
     <div id="toast" class="toast"></div>
 
