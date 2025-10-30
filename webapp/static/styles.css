@@ -1147,3 +1147,164 @@ body {
 .community-view.active {
     display: block;
 }
+
+/* Rating Display */
+.rating-display {
+    margin-top: 1rem;
+    text-align: center;
+    padding: 1rem;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(74, 175, 80, 0.1), rgba(46, 125, 50, 0.1));
+    border: 2px solid var(--accent-green);
+}
+
+.rating-display.rating-high {
+    background: linear-gradient(135deg, rgba(74, 175, 80, 0.15), rgba(46, 125, 50, 0.15));
+    border-color: var(--accent-green);
+}
+
+.rating-display.rating-medium {
+    background: linear-gradient(135deg, rgba(255, 179, 0, 0.15), rgba(255, 160, 0, 0.15));
+    border-color: var(--accent-amber);
+}
+
+.rating-display.rating-low {
+    background: linear-gradient(135deg, rgba(244, 67, 54, 0.15), rgba(211, 47, 47, 0.15));
+    border-color: var(--accent-red);
+}
+
+.rating-percentage {
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.rating-high .rating-percentage {
+    color: var(--accent-green);
+}
+
+.rating-medium .rating-percentage {
+    color: var(--accent-amber);
+}
+
+.rating-low .rating-percentage {
+    color: var(--accent-red);
+}
+
+.rating-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 500;
+}
+
+/* Rank Badge Large */
+.rank-badge-large {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: 25px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0.5rem 0;
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+}
+
+.rank-badge-large.unverified {
+    background: rgba(158, 158, 158, 0.1);
+    border-color: #9E9E9E;
+    color: #9E9E9E;
+}
+
+.rank-badge-large.verified {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: #4CAF50;
+    color: #4CAF50;
+}
+
+.rank-badge-large.trusted {
+    background: rgba(33, 150, 243, 0.1);
+    border-color: #2196F3;
+    color: #2196F3;
+}
+
+.rank-badge-large.endorsed {
+    background: rgba(255, 152, 0, 0.1);
+    border-color: #FF9800;
+    color: #FF9800;
+}
+
+.rank-badge-large.top_tier {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 193, 7, 0.2));
+    border-color: #FFD700;
+    color: #FFD700;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+/* Vote Buttons */
+.vote-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.vote-btn {
+    flex: 1;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.vote-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.vote-btn.vote-positive {
+    border-color: var(--accent-green);
+}
+
+.vote-btn.vote-positive.active {
+    background: var(--accent-green);
+    color: white;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.vote-btn.vote-negative {
+    border-color: var(--accent-red);
+}
+
+.vote-btn.vote-negative.active {
+    background: var(--accent-red);
+    color: white;
+    box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+}
+
+/* Positive/Negative Vote Stats */
+.stat-card.positive-votes {
+    border-left: 3px solid var(--accent-green);
+}
+
+.stat-card.negative-votes {
+    border-left: 3px solid var(--accent-red);
+}
+
+.stat-card.positive-votes .stat-value {
+    color: var(--accent-green);
+}
+
+.stat-card.negative-votes .stat-value {
+    color: var(--accent-red);
+}

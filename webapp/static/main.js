@@ -97,6 +97,15 @@ function setupEventListeners() {
     if (vouchMessage) {
         vouchMessage.addEventListener('input', updateCharCount);
     }
+    
+    // Vote buttons
+    document.querySelectorAll('.vote-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.vote-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            document.getElementById('voteType').value = e.target.dataset.vote;
+        });
+    });
 
     // Profile buttons
     const requestVouchBtn = document.getElementById('requestVouchBtn');
@@ -338,8 +347,26 @@ async function loadProfileTab() {
         }
 
         // Update stats
-        document.getElementById('vouchCount').textContent = data.user.total_vouches;
-        document.getElementById('vouchGiven').textContent = data.vouches_given.length;
+        const positiveVotes = data.user.positive_votes || 0;
+        const negativeVotes = data.user.negative_votes || 0;
+        const ratingPercentage = data.user.rating_percentage || 100;
+        
+        document.getElementById('positiveVotes').textContent = positiveVotes;
+        document.getElementById('negativeVotes').textContent = negativeVotes;
+        
+        // Update rating display
+        const ratingDisplay = document.getElementById('ratingDisplay');
+        const ratingPercentageEl = ratingDisplay.querySelector('.rating-percentage');
+        ratingPercentageEl.textContent = `${Math.round(ratingPercentage)}%`;
+        
+        // Color code the rating
+        if (ratingPercentage >= 80) {
+            ratingDisplay.className = 'rating-display rating-high';
+        } else if (ratingPercentage >= 60) {
+            ratingDisplay.className = 'rating-display rating-medium';
+        } else {
+            ratingDisplay.className = 'rating-display rating-low';
+        }
         
         // Update streak
         const streakDays = data.user.streak_days || 0;
@@ -479,6 +506,8 @@ async function handleVouchSubmit(e) {
     try {
         showLoading(true);
 
+        const voteType = document.getElementById('voteType').value;
+        
         const response = await fetch(`${API_BASE}/api/vouch`, {
             method: 'POST',
             headers: {
@@ -487,7 +516,8 @@ async function handleVouchSubmit(e) {
             body: JSON.stringify({
                 from_user_id: currentUser.telegram_user_id,
                 to_username: targetUsername,
-                message: message || null
+                message: message || null,
+                vote_type: voteType
             })
         });
 

@@ -86,7 +86,8 @@ class Database:
                     message TEXT,
                     created_at TIMESTAMP DEFAULT NOW(),
                     approved BOOLEAN DEFAULT TRUE,
-                    is_pending BOOLEAN DEFAULT FALSE
+                    is_pending BOOLEAN DEFAULT FALSE,
+                    vote_type TEXT DEFAULT 'positive'
                 )
             """)
             
@@ -95,6 +96,10 @@ class Database:
                 await conn.execute("ALTER TABLE vouches ADD COLUMN IF NOT EXISTS to_username TEXT")
                 await conn.execute("ALTER TABLE vouches ADD COLUMN IF NOT EXISTS is_pending BOOLEAN DEFAULT FALSE")
                 await conn.execute("ALTER TABLE vouches ALTER COLUMN to_user_id DROP NOT NULL")
+                await conn.execute("ALTER TABLE vouches ADD COLUMN IF NOT EXISTS vote_type TEXT DEFAULT 'positive'")
+                await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS positive_votes INTEGER DEFAULT 0")
+                await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS negative_votes INTEGER DEFAULT 0")
+                await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rating_percentage FLOAT DEFAULT 100.0")
             except Exception as e:
                 logger.warning(f"Schema update warning (might be expected): {e}")
 
@@ -309,7 +314,7 @@ class Database:
             })
 
     # Vouch operations
-    async def create_vouch(self, from_user_id: int, to_user_id: Optional[int] = None, to_username: Optional[str] = None, message: Optional[str] = None) -> Dict[str, Any]:
+    async def create_vouch(self, from_user_id: int, to_user_id: Optional[int] = None, to_username: Optional[str] = None, message: Optional[str] = None, vote_type: str = 'positive') -> Dict[str, Any]:
         """Create a new vouch - supports both existing users and pending vouches for users who haven't joined yet"""
         pool = self._ensure_connected()
         async with pool.acquire() as conn:
@@ -351,15 +356,40 @@ class Database:
             if to_user_id:
                 # User exists - create confirmed vouch
                 vouch = await conn.fetchrow("""
-                    INSERT INTO vouches (from_user_id, to_user_id, to_username, message, is_pending)
-                    VALUES ($1, $2, $3, $4, FALSE)
+                    INSERT INTO vouches (from_user_id, to_user_id, to_username, message, is_pending, vote_type)
+                    VALUES ($1, $2, $3, $4, FALSE, $5)
                     RETURNING *
-                """, from_user_id, to_user_id, to_username if to_username else None, message)
+                """, from_user_id, to_user_id, to_username if to_username else None, message, vote_type)
 
-                # Update total vouches count
-                await conn.execute(
-                    "UPDATE users SET total_vouches = total_vouches + 1 WHERE telegram_user_id = $1",
+                # Update vote counts based on vote type
+                if vote_type == 'positive':
+                    await conn.execute(
+                        """UPDATE users SET 
+                           total_vouches = total_vouches + 1,
+                           positive_votes = positive_votes + 1
+                           WHERE telegram_user_id = $1""",
+                        to_user_id
+                    )
+                else:
+                    await conn.execute(
+                        "UPDATE users SET negative_votes = negative_votes + 1 WHERE telegram_user_id = $1",
+                        to_user_id
+                    )
+                
+                # Calculate and update rating percentage
+                user_stats = await conn.fetchrow(
+                    "SELECT positive_votes, negative_votes FROM users WHERE telegram_user_id = $1",
                     to_user_id
+                )
+                total_votes = user_stats['positive_votes'] + user_stats['negative_votes']
+                if total_votes > 0:
+                    rating = (user_stats['positive_votes'] / total_votes) * 100
+                else:
+                    rating = 100.0
+                
+                await conn.execute(
+                    "UPDATE users SET rating_percentage = $1 WHERE telegram_user_id = $2",
+                    rating, to_user_id
                 )
 
                 # Get updated vouch count
@@ -396,10 +426,10 @@ class Database:
             else:
                 # User doesn't exist - create pending vouch
                 vouch = await conn.fetchrow("""
-                    INSERT INTO vouches (from_user_id, to_user_id, to_username, message, is_pending)
-                    VALUES ($1, NULL, $2, $3, TRUE)
+                    INSERT INTO vouches (from_user_id, to_user_id, to_username, message, is_pending, vote_type)
+                    VALUES ($1, NULL, $2, $3, TRUE, $4)
                     RETURNING *
-                """, from_user_id, to_username, message)
+                """, from_user_id, to_username, message, vote_type)
 
                 await self.log_event("pending_vouch_created", from_user_id, {
                     "to_username": to_username,

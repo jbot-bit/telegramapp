@@ -97,6 +97,7 @@ class VouchRequest(BaseModel):
     from_user_id: int
     to_username: str
     message: Optional[str] = None
+    vote_type: str = 'positive'  # 'positive' or 'negative'
 
 
 class InviteRequest(BaseModel):
@@ -243,7 +244,8 @@ async def create_vouch(vouch_request: VouchRequest):
         result = await db.create_vouch(
             from_user_id=vouch_request.from_user_id,
             to_username=target_username,
-            message=message if message else ""
+            message=message if message else "",
+            vote_type=vouch_request.vote_type
         )
 
         if "error" in result:

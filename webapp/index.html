@@ -33,7 +33,11 @@
                         <div class="avatar" id="profileAvatar">👤</div>
                         <div class="profile-info">
                             <h2 id="profileName">Loading...</h2>
-                            <div class="rank-badge" id="profileRank"></div>
+                            <div class="rank-badge-large" id="profileRank"></div>
+                            <div class="rating-display" id="ratingDisplay">
+                                <div class="rating-percentage">100%</div>
+                                <div class="rating-label">Trust Rating</div>
+                            </div>
                         </div>
                         <button class="btn-icon" id="editProfileBtn" title="Edit Profile">✏️</button>
                     </div>
@@ -47,13 +51,13 @@
                     </div>
 
                     <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-value" id="vouchCount">0</div>
-                            <div class="stat-label">Vouches Received</div>
+                        <div class="stat-card positive-votes">
+                            <div class="stat-value" id="positiveVotes">0</div>
+                            <div class="stat-label">👍 Positive</div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="vouchGiven">0</div>
-                            <div class="stat-label">Vouches Given</div>
+                        <div class="stat-card negative-votes">
+                            <div class="stat-value" id="negativeVotes">0</div>
+                            <div class="stat-label">👎 Negative</div>
                         </div>
                         <div class="stat-card streak-card">
                             <div class="stat-value" id="streakCount">🔥 0</div>
@@ -99,8 +103,8 @@
             <!-- VOUCH SOMEONE TAB -->
             <div id="vouch-tab" class="tab-content">
                 <div class="vouch-form-card">
-                    <h2>Give a Vouch</h2>
-                    <p class="subtitle">Support someone in the community</p>
+                    <h2>Rate Someone</h2>
+                    <p class="subtitle">Give positive or negative feedback</p>
 
                     <form id="vouchForm">
                         <div class="form-group">
@@ -114,11 +118,25 @@
                             >
                         </div>
 
+                        <!-- Vote Type Selection -->
+                        <div class="form-group">
+                            <label>Vote Type</label>
+                            <div class="vote-buttons">
+                                <button type="button" class="vote-btn vote-positive active" data-vote="positive">
+                                    👍 Positive
+                                </button>
+                                <button type="button" class="vote-btn vote-negative" data-vote="negative">
+                                    👎 Negative
+                                </button>
+                            </div>
+                            <input type="hidden" id="voteType" value="positive">
+                        </div>
+
                         <div class="form-group">
                             <label for="vouchMessage">Message (Optional)</label>
                             <textarea
                                 id="vouchMessage"
-                                placeholder="Why do you vouch for them?"
+                                placeholder="Share your feedback..."
                                 maxlength="120"
                                 rows="3"
                             ></textarea>
@@ -133,7 +151,7 @@
                         </div>
 
                         <button type="submit" class="btn btn-primary btn-large" id="submitVouchBtn">
-                            ✅ Submit Vouch
+                            ✅ Submit Vote
                         </button>
                     </form>
 
