@@ -541,4 +541,12 @@ async def update_admin_config(admin_id: int, key: str, value: str):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", "5000"))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    
+    is_production = os.getenv("REPLIT_ENVIRONMENT", "development") == "production"
+    
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=port, 
+        reload=not is_production
+    )

@@ -120,15 +120,45 @@ Preferred communication style: Simple, everyday language.
 **Hosting**: Replit (or any cloud platform supporting Python/FastAPI)
 - Environment variables via Replit Secrets
 - Automatic HTTPS via Replit domains
-- Zero-downtime deploys with uvicorn auto-reload
+- Autoscale deployment for production
+- Development environment uses hot-reload
+
+**Production vs Development Environments**:
+
+**Development Environment**:
+- Uses the Replit development database (accessible via agent and database tools)
+- Environment variables from Replit Secrets panel
+- Uvicorn runs with hot-reload enabled (`reload=True`)
+- Accessed via the workspace webview
+- Full access for testing and feature development
+- REPLIT_ENVIRONMENT = "development" (automatic)
+
+**Production Environment**:
+- Uses separate production database (managed via Publishing tool)
+- Environment variables configured in Publishing > Secrets
+- Uvicorn runs without reload for stability (`reload=False`)
+- Accessed via published URL (e.g., yourapp.replit.app)
+- Optimized for reliability and user experience
+- REPLIT_ENVIRONMENT = "production" (automatic when published)
+- Autoscale deployment handles traffic scaling
+
+**Environment Separation**:
+- Development and production databases are completely separate
+- Changes to development database schema are NOT automatically applied to production
+- When publishing, any database schema changes from dev must be manually reviewed
+- Production secrets are managed separately in the Publishing tool
+- The application detects environment via `REPLIT_ENVIRONMENT` variable
+- Development uses `DATABASE_URL` for Replit's development database
+- Production uses separate `DATABASE_URL` configured in publishing secrets
 
 **Configuration Management**:
 - BOT_TOKEN: Telegram bot authentication
 - BOT_USERNAME: For deep link generation
 - WEBHOOK_URL: Public endpoint for Telegram callbacks
 - ADMIN_ID: Administrative user access
-- DATABASE_URL: PostgreSQL connection string
-- PORT: Server binding (default: 8080)
+- DATABASE_URL: PostgreSQL connection string (separate for dev/prod)
+- PORT: Server binding (default: 5000)
+- REPLIT_ENVIRONMENT: Automatically set to "development" or "production"
 
 **Error Recovery**:
 - Application starts even if database connection fails initially
