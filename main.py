@@ -368,23 +368,13 @@ async def send_invite(invite_request: InviteRequest):
                 )
 
             if target_user:
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-
-                webapp_url = f"{WEBHOOK_URL}?view=profile&id={invite_request.from_user_id}"
-                keyboard = [[InlineKeyboardButton("Open Profile", web_app=WebAppInfo(url=webapp_url))]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                await bot_app.bot.send_message(
-                    chat_id=target_user["telegram_user_id"],
-                    text=f"👋 @{inviter['username'] or inviter['first_name']} invited you to verify them on Vouch Portal.",
-                    reply_markup=reply_markup
-                )
-
-                await db.log_event("invite_sent", invite_request.from_user_id, {
+                # NOTIFICATIONS DISABLED - No invite messages sent
+                # Just log the event without sending DM
+                await db.log_event("invite_logged", invite_request.from_user_id, {
                     "to_username": invite_request.to_username
                 })
 
-                return {"success": True, "message": "Invite sent"}
+                return {"success": True, "message": "Invite recorded"}
         except Exception as e:
             logger.error(f"Failed to send invite DM: {e}")
             # Log cooldown anyway

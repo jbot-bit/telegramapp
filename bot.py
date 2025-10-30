@@ -213,23 +213,9 @@ async def vouch_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             new_rank_name = db.get_rank_name(target_data["rank"])
             new_rank_emoji = db.get_rank_emoji(target_data["rank"])
 
-            # Send notification to target user
-            try:
-                webapp_url = f"{WEBHOOK_URL}?view=profile&id={target_user_id}"
-                keyboard = [[
-                    InlineKeyboardButton("🎉 View My Profile", web_app=WebAppInfo(url=webapp_url)),
-                    InlineKeyboardButton("Share Achievement", switch_inline_query=f"I just reached {new_rank_emoji} {new_rank_name} on Vouch Portal!")
-                ]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                await context.bot.send_message(
-                    chat_id=target_user_id,
-                    text=f"🎉 **Congratulations!**\n\nYou've been promoted to {new_rank_emoji} **{new_rank_name}**!\n\nYour trust score just increased.",
-                    reply_markup=reply_markup,
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                logger.error(f"Failed to send rank-up notification: {e}")
+            # NOTIFICATIONS DISABLED - No rank-up messages sent
+            # Users will see rank updates when they open the app
+            pass
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
