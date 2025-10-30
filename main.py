@@ -191,6 +191,24 @@ class ProfileUpdateRequest(BaseModel):
     profile_picture_url: Optional[str] = None
 
 
+# Middleware to add no-cache headers for HTML, JS, and CSS
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    """Add no-cache headers to prevent stale cached files"""
+    response = await call_next(request)
+    
+    # Add no-cache headers for HTML, JS, and CSS files
+    if (request.url.path == "/" or 
+        request.url.path.endswith('.html') or 
+        request.url.path.endswith('.js') or 
+        request.url.path.endswith('.css')):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    
+    return response
+
+
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def serve_webapp():
