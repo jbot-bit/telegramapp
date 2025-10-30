@@ -115,6 +115,35 @@ Preferred communication style: Simple, everyday language.
 - Avoids negative words (scam, fraud, report)
 - Uses trust-focused vocabulary (verify, build reputation, community)
 
+**Recent UI/UX Enhancements** (October 2025):
+
+1. **Progress Pressure Messaging**:
+   - Displays "Only N to reach next rank!" when user is within 3 vouches of ranking up
+   - Shows "👑 Max rank achieved!" for users who have reached Top-Tier Verified
+   - Handles all edge cases (new users, mid-tier users, max rank users)
+
+2. **Pulse Effect on CTA**:
+   - "Request Vouch" button pulses for unverified users (< 3 vouches)
+   - Automatically removes pulse effect once user becomes Verified
+   - Conditionally applied via JavaScript for optimal UX
+
+3. **Share Modal System**:
+   - Unified modal for profile sharing and rank achievements
+   - Copy-to-clipboard functionality for share links
+   - Direct Telegram share integration using Telegram WebApp SDK
+   - Supports both "Request Vouch" and "Share Profile" flows
+
+4. **Mutual-Vouch CTA Toast**:
+   - Animated toast notification when receiving a vouch
+   - "Return the favor?" prompt with direct "Vouch Back" button
+   - Automatically pre-fills voucher username in vouch form
+   - Auto-dismisses after 8 seconds
+
+5. **Disclaimers and Microcopy**:
+   - Inline disclaimers in vouch form explaining community-based feedback
+   - Footer disclaimer clarifying non-financial nature of the system
+   - Positive, community-focused language throughout
+
 ### Deployment Architecture
 
 **Hosting**: Replit (or any cloud platform supporting Python/FastAPI)
