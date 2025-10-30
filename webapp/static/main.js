@@ -42,6 +42,24 @@ async function initializeApp() {
             return;
         }
 
+        // Initialize user (creates profile if doesn't exist)
+        const initResponse = await fetch(`${API_BASE}/api/profile/init`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                telegram_user_id: telegramUser.id,
+                username: telegramUser.username || null,
+                first_name: telegramUser.first_name || null,
+                last_name: telegramUser.last_name || null
+            })
+        });
+
+        if (!initResponse.ok) {
+            throw new Error(`Failed to initialize profile: ${initResponse.status}`);
+        }
+
         // Fetch bot info and user profile in parallel
         const [botInfoResponse, profileResponse] = await Promise.all([
             fetch(`${API_BASE}/api/bot-info`),

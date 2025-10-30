@@ -261,6 +261,35 @@ async def get_users(limit: int = 100, offset: int = 0):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/profile/init")
+async def initialize_user(request: Request):
+    """Initialize or get user profile - auto-creates user if needed"""
+    try:
+        body = await request.json()
+        telegram_user_id = body.get("telegram_user_id")
+        username = body.get("username")
+        first_name = body.get("first_name")
+        last_name = body.get("last_name")
+        
+        if not telegram_user_id:
+            raise HTTPException(status_code=400, detail="telegram_user_id is required")
+        
+        # Get or create user
+        user = await db.get_or_create_user(
+            telegram_user_id=telegram_user_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name
+        )
+        
+        return {"user": user, "created": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error initializing user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/profile/{user_id}")
 async def get_profile(user_id: int):
     """Get user profile with vouches"""
