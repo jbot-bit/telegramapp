@@ -364,14 +364,35 @@ async function handleVouchSubmit(e) {
         const data = await response.json();
 
         if (response.ok) {
-            showToast('✅ Vouch recorded successfully!', 'success');
-
-            // Trigger confetti
-            confetti({
-                particleCount: 100,
-                spread: 70,
-                origin: { y: 0.6 }
-            });
+            // Check if vouch is pending or confirmed
+            if (data.pending) {
+                // Pending vouch - user hasn't joined yet
+                showToast(`⏳ Vouch saved for @${targetUsername}! They'll receive it when they join the bot.`, 'info');
+                
+                // Smaller confetti for pending
+                confetti({
+                    particleCount: 50,
+                    spread: 50,
+                    origin: { y: 0.6 }
+                });
+            } else {
+                // Confirmed vouch - user exists
+                showToast('✅ Vouch recorded successfully!', 'success');
+                
+                // Trigger confetti
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+                
+                // Check for mutual vouch
+                if (data.mutual_vouch) {
+                    setTimeout(() => {
+                        showMutualVouchPrompt(targetUsername);
+                    }, 2000);
+                }
+            }
 
             // Vibrate if supported
             if (tg.HapticFeedback) {
@@ -384,13 +405,6 @@ async function handleVouchSubmit(e) {
 
             // Reload vouch tab
             loadVouchTab();
-
-            // Check for mutual vouch
-            if (data.mutual_vouch) {
-                setTimeout(() => {
-                    showMutualVouchPrompt(targetUsername);
-                }, 2000);
-            }
         } else {
             showToast(data.detail || 'Failed to submit vouch', 'error');
         }
