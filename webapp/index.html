@@ -55,6 +55,10 @@
                             <div class="stat-value" id="vouchGiven">0</div>
                             <div class="stat-label">Vouches Given</div>
                         </div>
+                        <div class="stat-card streak-card">
+                            <div class="stat-value" id="streakCount">🔥 0</div>
+                            <div class="stat-label">Day Streak</div>
+                        </div>
                     </div>
 
                     <!-- Progress Bar -->
@@ -143,27 +147,52 @@
 
             <!-- COMMUNITY TAB -->
             <div id="community-tab" class="tab-content">
-                <div class="search-section">
-                    <input
-                        type="search"
-                        id="communitySearch"
-                        placeholder="🔍 Search users..."
-                        class="search-input"
-                    >
-                    <div class="view-toggle">
-                        <button class="view-btn active" data-view="grid" title="Grid View">⊞</button>
-                        <button class="view-btn" data-view="list" title="List View">☰</button>
+                <!-- View Switcher -->
+                <div class="community-view-tabs">
+                    <button class="view-tab-btn active" data-view="activity">🔥 Activity</button>
+                    <button class="view-tab-btn" data-view="users">👥 Users</button>
+                    <button class="view-tab-btn" data-view="leaderboards">🏆 Leaderboards</button>
+                </div>
+
+                <!-- Activity Feed View -->
+                <div id="activityView" class="community-view active">
+                    <div class="section">
+                        <h3>Recent Activity</h3>
+                        <div id="activityFeed" class="activity-feed"></div>
                     </div>
                 </div>
 
-                <div class="filters">
-                    <button class="filter-btn active" data-filter="all">All Users</button>
-                    <button class="filter-btn" data-filter="top_tier">👑 Top-Tier</button>
-                    <button class="filter-btn" data-filter="endorsed">🛡 Endorsed</button>
-                    <button class="filter-btn" data-filter="trusted">🔷 Trusted</button>
+                <!-- Users View -->
+                <div id="usersView" class="community-view" style="display: none;">
+                    <div class="search-section">
+                        <input
+                            type="search"
+                            id="communitySearch"
+                            placeholder="🔍 Search users..."
+                            class="search-input"
+                        >
+                    </div>
+
+                    <div class="filters">
+                        <button class="filter-btn active" data-filter="all">All Users</button>
+                        <button class="filter-btn" data-filter="top_tier">👑 Top-Tier</button>
+                        <button class="filter-btn" data-filter="endorsed">🛡 Endorsed</button>
+                        <button class="filter-btn" data-filter="trusted">🔷 Trusted</button>
+                    </div>
+
+                    <div id="communityGrid" class="community-grid"></div>
                 </div>
 
-                <div id="communityGrid" class="community-grid"></div>
+                <!-- Leaderboards View -->
+                <div id="leaderboardsView" class="community-view" style="display: none;">
+                    <div class="leaderboard-tabs">
+                        <button class="lb-tab-btn active" data-board="most_vouched">Most Vouched</button>
+                        <button class="lb-tab-btn" data-board="top_givers">Top Givers</button>
+                        <button class="lb-tab-btn" data-board="rising_stars">Rising Stars</button>
+                        <button class="lb-tab-btn" data-board="streak_leaders">Streak Leaders</button>
+                    </div>
+                    <div id="leaderboardContent" class="leaderboard-list"></div>
+                </div>
             </div>
 
             <!-- INSIGHTS TAB (Admin Only) -->

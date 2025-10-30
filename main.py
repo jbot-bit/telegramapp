@@ -403,6 +403,51 @@ async def get_analytics(user_id: Optional[int] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/activity")
+async def get_activity(limit: int = 50):
+    """Get recent community activity feed"""
+    try:
+        activity = await db.get_recent_activity(limit)
+        return {"activity": activity}
+    except Exception as e:
+        logger.error(f"Error getting activity: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/leaderboards/{board_type}")
+async def get_leaderboard_by_type(board_type: str, limit: int = 20):
+    """Get leaderboard data - supports: most_vouched, top_givers, rising_stars, streak_leaders"""
+    try:
+        leaderboard = await db.get_leaderboard(board_type, limit)
+        
+        # Add rank info to each user
+        for user in leaderboard:
+            user["rank_emoji"] = db.get_rank_emoji(user["rank"])
+            user["rank_name"] = db.get_rank_name(user["rank"])
+        
+        return {"leaderboard": leaderboard, "board_type": board_type}
+    except Exception as e:
+        logger.error(f"Error getting leaderboard: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/referrals/{user_id}")
+async def get_referral_stats(user_id: int):
+    """Get referral statistics for a user"""
+    try:
+        stats = await db.get_user_referral_stats(user_id)
+        
+        # Add rank info to referrals
+        for referral in stats["recent_referrals"]:
+            referral["rank_emoji"] = db.get_rank_emoji(referral["rank"])
+            referral["rank_name"] = db.get_rank_name(referral["rank"])
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting referral stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/viral/summary")
 async def get_viral_summary():
     """Get viral growth summary"""

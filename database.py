@@ -161,19 +161,31 @@ class Database:
 
             if user:
                 # Update last active and username if provided
+                # Calculate streak update
+                streak_update = await self._calculate_streak_update(user)
+                
                 if username:
                     old_username = user["username"]
                     await conn.execute(
-                        "UPDATE users SET last_active_at = NOW(), username = $2 WHERE telegram_user_id = $1",
-                        telegram_user_id, username
+                        """UPDATE users SET 
+                           last_active_at = NOW(), 
+                           username = $2,
+                           streak_days = $3,
+                           last_streak_date = CURRENT_DATE
+                           WHERE telegram_user_id = $1""",
+                        telegram_user_id, username, streak_update
                     )
                     # Process pending vouches if username changed or was newly set
                     if old_username != username:
                         await self._process_pending_vouches(telegram_user_id, username)
                 else:
                     await conn.execute(
-                        "UPDATE users SET last_active_at = NOW() WHERE telegram_user_id = $1",
-                        telegram_user_id
+                        """UPDATE users SET 
+                           last_active_at = NOW(),
+                           streak_days = $2,
+                           last_streak_date = CURRENT_DATE
+                           WHERE telegram_user_id = $1""",
+                        telegram_user_id, streak_update
                     )
                 return dict(user)
             else:
@@ -523,6 +535,156 @@ class Database:
                 INSERT INTO invites (from_user_id, to_username)
                 VALUES ($1, $2)
             """, from_user_id, to_username)
+
+    async def _calculate_streak_update(self, user: Dict[str, Any]) -> int:
+        """Calculate updated streak days based on last activity"""
+        from datetime import date, timedelta
+        
+        current_streak = user.get("streak_days", 0) or 0
+        last_streak_date = user.get("last_streak_date")
+        today = date.today()
+        
+        # If no previous streak date, start fresh
+        if not last_streak_date:
+            return 1
+        
+        # Convert to date if needed
+        if hasattr(last_streak_date, 'date'):
+            last_streak_date = last_streak_date.date()
+        
+        # If already updated today, maintain current streak
+        if last_streak_date == today:
+            return current_streak
+        
+        # If updated yesterday, increment streak
+        yesterday = today - timedelta(days=1)
+        if last_streak_date == yesterday:
+            return current_streak + 1
+        
+        # If gap is more than 1 day, reset streak
+        return 1
+    
+    async def get_recent_activity(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get recent activity feed (vouches and rank ups)"""
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
+            # Get recent vouches
+            recent_vouches = await conn.fetch("""
+                SELECT 
+                    'vouch' as activity_type,
+                    v.created_at,
+                    v.from_user_id,
+                    v.to_user_id,
+                    from_user.username as from_username,
+                    from_user.first_name as from_first_name,
+                    to_user.username as to_username,
+                    to_user.first_name as to_first_name,
+                    v.message
+                FROM vouches v
+                JOIN users from_user ON v.from_user_id = from_user.telegram_user_id
+                LEFT JOIN users to_user ON v.to_user_id = to_user.telegram_user_id
+                WHERE v.is_pending = FALSE
+                ORDER BY v.created_at DESC
+                LIMIT $1
+            """, limit // 2)
+            
+            # Get recent rank ups
+            recent_rankups = await conn.fetch("""
+                SELECT 
+                    'rank_up' as activity_type,
+                    re.created_at,
+                    re.user_id,
+                    re.old_rank,
+                    re.new_rank,
+                    u.username,
+                    u.first_name
+                FROM rank_events re
+                JOIN users u ON re.user_id = u.telegram_user_id
+                ORDER BY re.created_at DESC
+                LIMIT $1
+            """, limit // 2)
+            
+            # Combine and sort by timestamp
+            all_activity = [dict(v) for v in recent_vouches] + [dict(r) for r in recent_rankups]
+            all_activity.sort(key=lambda x: x['created_at'], reverse=True)
+            
+            return all_activity[:limit]
+    
+    async def get_leaderboard(self, board_type: str = 'most_vouched', limit: int = 20) -> List[Dict[str, Any]]:
+        """Get leaderboard data with different sorting options"""
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
+            if board_type == 'most_vouched':
+                users = await conn.fetch("""
+                    SELECT telegram_user_id, username, first_name, total_vouches, rank, streak_days
+                    FROM users
+                    ORDER BY total_vouches DESC
+                    LIMIT $1
+                """, limit)
+            elif board_type == 'top_givers':
+                users = await conn.fetch("""
+                    SELECT u.telegram_user_id, u.username, u.first_name, u.total_vouches, u.rank, u.streak_days,
+                           COUNT(v.id) as vouches_given
+                    FROM users u
+                    LEFT JOIN vouches v ON u.telegram_user_id = v.from_user_id
+                    GROUP BY u.telegram_user_id
+                    ORDER BY vouches_given DESC
+                    LIMIT $1
+                """, limit)
+            elif board_type == 'rising_stars':
+                # Users who gained vouches in the last 7 days
+                users = await conn.fetch("""
+                    SELECT u.telegram_user_id, u.username, u.first_name, u.total_vouches, u.rank, u.streak_days,
+                           COUNT(v.id) as recent_vouches
+                    FROM users u
+                    LEFT JOIN vouches v ON u.telegram_user_id = v.to_user_id
+                    WHERE v.created_at > NOW() - INTERVAL '7 days'
+                    GROUP BY u.telegram_user_id
+                    HAVING COUNT(v.id) > 0
+                    ORDER BY recent_vouches DESC
+                    LIMIT $1
+                """, limit)
+            elif board_type == 'streak_leaders':
+                users = await conn.fetch("""
+                    SELECT telegram_user_id, username, first_name, total_vouches, rank, streak_days
+                    FROM users
+                    WHERE streak_days > 0
+                    ORDER BY streak_days DESC
+                    LIMIT $1
+                """, limit)
+            else:
+                users = await conn.fetch("""
+                    SELECT telegram_user_id, username, first_name, total_vouches, rank, streak_days
+                    FROM users
+                    ORDER BY total_vouches DESC
+                    LIMIT $1
+                """, limit)
+            
+            return [dict(u) for u in users]
+    
+    async def get_user_referral_stats(self, user_id: int) -> Dict[str, Any]:
+        """Get referral statistics for a user"""
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
+            # Count users who signed up via this user's referral
+            referred_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM users WHERE referrer_id = $1",
+                user_id
+            )
+            
+            # Get recent referrals
+            recent_referrals = await conn.fetch("""
+                SELECT telegram_user_id, username, first_name, first_seen_at, total_vouches, rank
+                FROM users
+                WHERE referrer_id = $1
+                ORDER BY first_seen_at DESC
+                LIMIT 10
+            """, user_id)
+            
+            return {
+                "total_referrals": referred_count,
+                "recent_referrals": [dict(r) for r in recent_referrals]
+            }
 
     @staticmethod
     def calculate_rank(vouch_count: int) -> str:

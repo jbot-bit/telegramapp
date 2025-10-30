@@ -11,6 +11,8 @@ let currentUser = null;
 let currentTab = 'profile';
 let allUsers = [];
 let currentFilter = 'all';
+let currentCommunityView = 'activity';
+let currentLeaderboardType = 'most_vouched';
 
 // API Base URL
 const API_BASE = window.location.origin;
@@ -120,6 +122,53 @@ function setupEventListeners() {
             e.target.classList.add('active');
             currentFilter = e.target.dataset.filter;
             filterCommunity();
+        });
+    });
+    
+    // Community view tabs
+    document.querySelectorAll('.view-tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const viewType = e.target.dataset.view;
+            currentCommunityView = viewType;
+            
+            // Update tab buttons
+            document.querySelectorAll('.view-tab-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            
+            // Switch views
+            document.querySelectorAll('.community-view').forEach(view => {
+                view.style.display = 'none';
+                view.classList.remove('active');
+            });
+            
+            if (viewType === 'activity') {
+                document.getElementById('activityView').style.display = 'block';
+                document.getElementById('activityView').classList.add('active');
+                loadActivityFeed();
+            } else if (viewType === 'users') {
+                document.getElementById('usersView').style.display = 'block';
+                document.getElementById('usersView').classList.add('active');
+                loadUsersView();
+            } else if (viewType === 'leaderboards') {
+                document.getElementById('leaderboardsView').style.display = 'block';
+                document.getElementById('leaderboardsView').classList.add('active');
+                loadLeaderboardsView();
+            }
+        });
+    });
+    
+    // Leaderboard tabs
+    document.querySelectorAll('.lb-tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const boardType = e.target.dataset.board;
+            currentLeaderboardType = boardType;
+            
+            // Update tab buttons
+            document.querySelectorAll('.lb-tab-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            
+            // Load leaderboard
+            loadLeaderboard(boardType);
         });
     });
     
@@ -291,6 +340,17 @@ async function loadProfileTab() {
         // Update stats
         document.getElementById('vouchCount').textContent = data.user.total_vouches;
         document.getElementById('vouchGiven').textContent = data.vouches_given.length;
+        
+        // Update streak
+        const streakDays = data.user.streak_days || 0;
+        const streakElement = document.getElementById('streakCount');
+        if (streakDays > 0) {
+            streakElement.textContent = `🔥 ${streakDays}`;
+            streakElement.parentElement.classList.add('active-streak');
+        } else {
+            streakElement.textContent = '0';
+            streakElement.parentElement.classList.remove('active-streak');
+        }
 
         // Update progress
         updateProgressBar(data.user.total_vouches, data.next_rank_threshold, data.progress_percentage);
@@ -501,21 +561,156 @@ function updateCharCount() {
 
 // Community Tab
 async function loadCommunityTab() {
+    // Load based on current view
+    if (currentCommunityView === 'activity') {
+        await loadActivityFeed();
+    } else if (currentCommunityView === 'users') {
+        await loadUsersView();
+    } else if (currentCommunityView === 'leaderboards') {
+        await loadLeaderboardsView();
+    }
+}
+
+async function loadActivityFeed() {
     try {
         showLoading(true);
-
-        const response = await fetch(`${API_BASE}/api/users?limit=100`);
+        const response = await fetch(`${API_BASE}/api/activity?limit=50`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to load activity: ${response.status}`);
+        }
+        
         const data = await response.json();
-
-        allUsers = data.users;
-        renderCommunityGrid(allUsers);
-
+        renderActivityFeed(data.activity);
         showLoading(false);
     } catch (error) {
-        console.error('Error loading community:', error);
-        showToast('Failed to load community', 'error');
+        console.error('Error loading activity:', error);
+        showToast('Failed to load activity feed', 'error');
         showLoading(false);
     }
+}
+
+function renderActivityFeed(activities) {
+    const container = document.getElementById('activityFeed');
+    
+    if (!activities || activities.length === 0) {
+        container.innerHTML = '<div class="empty-state">No recent activity</div>';
+        return;
+    }
+    
+    container.innerHTML = activities.map(activity => {
+        if (activity.activity_type === 'vouch') {
+            const fromName = activity.from_username || activity.from_first_name;
+            const toName = activity.to_username || activity.to_first_name;
+            return `
+                <div class="activity-item">
+                    <div class="activity-icon">💬</div>
+                    <div class="activity-content">
+                        <div class="activity-text">
+                            <strong>@${fromName}</strong> vouched for <strong>@${toName}</strong>
+                        </div>
+                        ${activity.message ? `<div class="activity-message">"${activity.message}"</div>` : ''}
+                        <div class="activity-time">${formatDate(activity.created_at)}</div>
+                    </div>
+                </div>
+            `;
+        } else if (activity.activity_type === 'rank_up') {
+            const name = activity.username || activity.first_name;
+            const newRankEmoji = getRankEmoji(activity.new_rank);
+            const newRankName = getRankName(activity.new_rank);
+            return `
+                <div class="activity-item rank-up">
+                    <div class="activity-icon">🎉</div>
+                    <div class="activity-content">
+                        <div class="activity-text">
+                            <strong>@${name}</strong> reached <strong>${newRankEmoji} ${newRankName}</strong>
+                        </div>
+                        <div class="activity-time">${formatDate(activity.created_at)}</div>
+                    </div>
+                </div>
+            `;
+        }
+        return '';
+    }).join('');
+}
+
+async function loadUsersView() {
+    try {
+        showLoading(true);
+        const response = await fetch(`${API_BASE}/api/users?limit=100`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to load users: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        allUsers = data.users;
+        renderCommunityGrid(allUsers);
+        showLoading(false);
+    } catch (error) {
+        console.error('Error loading users:', error);
+        showToast('Failed to load users', 'error');
+        showLoading(false);
+    }
+}
+
+async function loadLeaderboardsView() {
+    await loadLeaderboard(currentLeaderboardType);
+}
+
+async function loadLeaderboard(boardType) {
+    try {
+        showLoading(true);
+        const response = await fetch(`${API_BASE}/api/leaderboards/${boardType}?limit=20`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to load leaderboard: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        renderLeaderboard(data.leaderboard, boardType);
+        showLoading(false);
+    } catch (error) {
+        console.error('Error loading leaderboard:', error);
+        showToast('Failed to load leaderboard', 'error');
+        showLoading(false);
+    }
+}
+
+function renderLeaderboard(users, boardType) {
+    const container = document.getElementById('leaderboardContent');
+    
+    if (!users || users.length === 0) {
+        container.innerHTML = '<div class="empty-state">No data available</div>';
+        return;
+    }
+    
+    container.innerHTML = users.map((user, index) => {
+        const medals = ['🥇', '🥈', '🥉'];
+        const medal = index < 3 ? medals[index] : `${index + 1}.`;
+        const name = user.username || user.first_name;
+        
+        let extraStat = '';
+        if (boardType === 'top_givers' && user.vouches_given !== undefined) {
+            extraStat = `${user.vouches_given} given`;
+        } else if (boardType === 'rising_stars' && user.recent_vouches !== undefined) {
+            extraStat = `+${user.recent_vouches} this week`;
+        } else if (boardType === 'streak_leaders') {
+            extraStat = `🔥 ${user.streak_days} days`;
+        } else {
+            extraStat = `${user.total_vouches} vouches`;
+        }
+        
+        return `
+            <div class="leaderboard-item" onclick="loadUserProfile(${user.telegram_user_id})">
+                <div class="lb-position">${medal}</div>
+                <div class="lb-info">
+                    <div class="lb-name">@${name}</div>
+                    <div class="lb-stat">${user.rank_emoji} ${user.rank_name} • ${extraStat}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 function renderCommunityGrid(users) {
@@ -583,6 +778,7 @@ async function loadUserProfile(userId) {
                 <div class="profile-info">
                     <h2>@${data.user.username || data.user.first_name}</h2>
                     <div class="rank-badge ${data.user.rank}">${rankEmoji} ${rankName}</div>
+                    ${data.user.streak_days > 0 ? `<div class="streak-badge">🔥 ${data.user.streak_days} day streak</div>` : ''}
                 </div>
             </div>
 
@@ -595,6 +791,12 @@ async function loadUserProfile(userId) {
                     <div class="stat-value">${data.vouches_given.length}</div>
                     <div class="stat-label">Given</div>
                 </div>
+                ${data.user.streak_days > 0 ? `
+                <div class="stat-card streak-card active-streak">
+                    <div class="stat-value">🔥 ${data.user.streak_days}</div>
+                    <div class="stat-label">Day Streak</div>
+                </div>
+                ` : ''}
             </div>
 
             <button class="btn btn-primary btn-large" onclick="vouchUser('${data.user.username || data.user.first_name}')">
