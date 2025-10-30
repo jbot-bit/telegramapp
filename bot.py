@@ -420,6 +420,56 @@ def setup_bot_handlers(application: Application):
     logger.info("Bot handlers setup complete")
 
 
+async def get_user_profile_photo_file_id(user_id: int) -> Optional[str]:
+    """
+    Fetch user's profile photo file_id from Telegram
+    Returns the file_id (NOT a URL) or None if no photo available
+    """
+    try:
+        from telegram import Bot
+        bot = Bot(token=BOT_TOKEN)
+        
+        # Get user profile photos
+        photos = await bot.get_user_profile_photos(user_id, limit=1)
+        
+        if photos.total_count > 0:
+            # Get the first photo (most recent) - return file_id only
+            file_id = photos.photos[0][0].file_id
+            
+            logger.info(f"Fetched profile photo file_id for user {user_id}")
+            return file_id
+        else:
+            logger.info(f"No profile photo found for user {user_id}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error fetching profile photo for user {user_id}: {e}")
+        return None
+
+
+async def download_profile_photo_bytes(file_id: str) -> Optional[bytes]:
+    """
+    Download profile photo bytes from Telegram using file_id
+    Returns the photo bytes or None if download fails
+    """
+    try:
+        from telegram import Bot
+        bot = Bot(token=BOT_TOKEN)
+        
+        # Get file info
+        file_info = await bot.get_file(file_id)
+        
+        # Download the file bytes
+        photo_bytes = await file_info.download_as_bytearray()
+        
+        logger.info(f"Downloaded profile photo for file_id {file_id}")
+        return bytes(photo_bytes)
+            
+    except Exception as e:
+        logger.error(f"Error downloading profile photo for file_id {file_id}: {e}")
+        return None
+
+
 def create_bot_application() -> Application:
     """Create and configure the bot application"""
     application = Application.builder().token(BOT_TOKEN).build()

@@ -13,6 +13,7 @@ let allUsers = [];
 let currentFilter = 'all';
 let currentCommunityView = 'activity';
 let currentLeaderboardType = 'most_vouched';
+let botUsername = 'VouchPortalBot'; // Default, will be fetched from API
 
 // API Base URL
 const API_BASE = window.location.origin;
@@ -41,14 +42,26 @@ async function initializeApp() {
             return;
         }
 
-        // Fetch user profile from backend
-        const response = await fetch(`${API_BASE}/api/profile/${telegramUser.id}`);
-        if (!response.ok) {
-            throw new Error(`Failed to load profile: ${response.status}`);
+        // Fetch bot info and user profile in parallel
+        const [botInfoResponse, profileResponse] = await Promise.all([
+            fetch(`${API_BASE}/api/bot-info`),
+            fetch(`${API_BASE}/api/profile/${telegramUser.id}`)
+        ]);
+
+        if (botInfoResponse.ok) {
+            const botInfo = await botInfoResponse.json();
+            botUsername = botInfo.bot_username || 'VouchPortalBot';
+        }
+
+        if (!profileResponse.ok) {
+            throw new Error(`Failed to load profile: ${profileResponse.status}`);
         }
         
-        const data = await response.json();
+        const data = await profileResponse.json();
         currentUser = data.user;
+
+        // Fetch profile photo for current user
+        fetchAndCacheProfilePhoto(currentUser.telegram_user_id);
 
         // Check if user is admin (get from environment or set dynamically)
         const adminElements = document.querySelectorAll('.admin-only');
@@ -731,9 +744,14 @@ function renderLeaderboard(users, boardType) {
             extraStat = `${user.total_vouches} vouches`;
         }
         
+        const photoHTML = user.profile_picture_url 
+            ? `<div class="lb-avatar" style="background-image: url(${API_BASE}/api/photo-proxy/${user.profile_picture_url}); background-size: cover; background-position: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 12px;"></div>`
+            : `<div class="lb-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; margin-right: 12px; font-size: 16px;">👤</div>`;
+        
         return `
-            <div class="leaderboard-item" onclick="loadUserProfile(${user.telegram_user_id})">
+            <div class="leaderboard-item" onclick="loadUserProfile(${user.telegram_user_id})" style="display: flex; align-items: center;">
                 <div class="lb-position">${medal}</div>
+                ${photoHTML}
                 <div class="lb-info">
                     <div class="lb-name">@${name}</div>
                     <div class="lb-stat">${user.rank_emoji} ${user.rank_name} • ${extraStat}</div>
@@ -751,14 +769,20 @@ function renderCommunityGrid(users) {
         return;
     }
 
-    container.innerHTML = users.map(user => `
-        <div class="community-card" onclick="loadUserProfile(${user.telegram_user_id})">
-            <div class="community-avatar">👤</div>
-            <div class="community-name">@${user.username || user.first_name}</div>
-            <div class="community-rank">${user.rank_emoji} ${user.rank_name}</div>
-            <div class="community-vouches">${user.total_vouches} vouches</div>
-        </div>
-    `).join('');
+    container.innerHTML = users.map(user => {
+        const photoHTML = user.profile_picture_url 
+            ? `<div class="community-avatar" style="background-image: url(${API_BASE}/api/photo-proxy/${user.profile_picture_url}); background-size: cover; background-position: center;"></div>`
+            : `<div class="community-avatar">👤</div>`;
+        
+        return `
+            <div class="community-card" onclick="loadUserProfile(${user.telegram_user_id})">
+                ${photoHTML}
+                <div class="community-name">@${user.username || user.first_name}</div>
+                <div class="community-rank">${user.rank_emoji} ${user.rank_name}</div>
+                <div class="community-vouches">${user.total_vouches} vouches</div>
+            </div>
+        `;
+    }).join('');
 }
 
 function filterCommunity() {
@@ -796,6 +820,11 @@ async function loadUserProfile(userId) {
         const response = await fetch(`${API_BASE}/api/profile/${userId}`);
         const data = await response.json();
 
+        // Fetch profile photo file_id if not cached
+        if (!data.user.profile_picture_url) {
+            await fetchAndCacheProfilePhoto(userId);
+        }
+
         const modal = document.getElementById('profileModal');
         const content = document.getElementById('modalProfileContent');
 
@@ -804,7 +833,7 @@ async function loadUserProfile(userId) {
 
         content.innerHTML = `
             <div class="profile-header">
-                <div class="avatar">👤</div>
+                ${getProfilePhotoHTML(data.user)}
                 <div class="profile-info">
                     <h2>@${data.user.username || data.user.first_name}</h2>
                     <div class="rank-badge ${data.user.rank}">${rankEmoji} ${rankName}</div>
@@ -937,9 +966,54 @@ function renderLeaderboard(containerId, users) {
     }).join('');
 }
 
+// Profile photo helpers
+async function fetchAndCacheProfilePhoto(userId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/profile-photo/${userId}`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.file_id) {
+                // Construct secure proxy URL
+                const proxyUrl = `${API_BASE}/api/photo-proxy/${data.file_id}`;
+                
+                // Update currentUser if it's their photo
+                if (currentUser && currentUser.telegram_user_id === userId) {
+                    currentUser.profile_photo_proxy_url = proxyUrl;
+                    updateProfilePhoto();
+                }
+                return proxyUrl;
+            }
+        }
+    } catch (error) {
+        console.error(`Failed to fetch profile photo for user ${userId}:`, error);
+    }
+    return null;
+}
+
+function updateProfilePhoto() {
+    const avatarElements = document.querySelectorAll('.avatar');
+    avatarElements.forEach(el => {
+        if (currentUser && currentUser.profile_photo_proxy_url) {
+            el.style.backgroundImage = `url(${currentUser.profile_photo_proxy_url})`;
+            el.style.backgroundSize = 'cover';
+            el.style.backgroundPosition = 'center';
+            el.textContent = '';
+        }
+    });
+}
+
+function getProfilePhotoHTML(user) {
+    if (user && user.profile_picture_url) {
+        // profile_picture_url contains file_id, construct proxy URL
+        const proxyUrl = `${API_BASE}/api/photo-proxy/${user.profile_picture_url}`;
+        return `<div class="avatar" style="background-image: url(${proxyUrl}); background-size: cover; background-position: center;"></div>`;
+    }
+    return `<div class="avatar">👤</div>`;
+}
+
 // Profile Actions
 async function handleRequestVouch() {
-    const shareUrl = `https://t.me/${tg.initDataUnsafe?.user?.username || 'VouchPortalBot'}?startapp=profile_${currentUser.telegram_user_id}`;
+    const shareUrl = `https://t.me/${botUsername}?startapp=profile_${currentUser.telegram_user_id}`;
 
     if (tg.isVersionAtLeast('6.1')) {
         tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent('Please vouch for me on Vouch Portal!')}`);

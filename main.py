@@ -27,6 +27,38 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 bot_app = None
 
 
+def sanitize_user_profile_url(user_dict):
+    """
+    Sanitize profile_picture_url to prevent bot token leaks.
+    If the URL contains api.telegram.org or http/https, clear it (unsafe URL).
+    Safe values are Telegram file_ids which will be proxied.
+    """
+    if user_dict and "profile_picture_url" in user_dict:
+        url = user_dict.get("profile_picture_url")
+        if url and ("api.telegram.org" in url.lower() or "http://" in url.lower() or "https://" in url.lower()):
+            logger.warning(f"Sanitized unsafe URL for user {user_dict.get('telegram_user_id')}: {url[:50]}")
+            user_dict["profile_picture_url"] = None
+    return user_dict
+
+
+def sanitize_response_data(data):
+    """
+    Recursively sanitize all user dictionaries in a response to prevent token leaks.
+    This is applied to all JSON responses as a safety net.
+    """
+    if isinstance(data, dict):
+        # Check if this looks like a user dict
+        if "profile_picture_url" in data:
+            sanitize_user_profile_url(data)
+        # Recursively sanitize all nested dicts
+        for key, value in data.items():
+            data[key] = sanitize_response_data(value)
+    elif isinstance(data, list):
+        # Sanitize all items in list
+        return [sanitize_response_data(item) for item in data]
+    return data
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for FastAPI app"""
@@ -85,6 +117,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Security middleware to sanitize all JSON responses
+@app.middleware("http")
+async def sanitize_responses(request: Request, call_next):
+    """Middleware to automatically sanitize all JSON responses"""
+    response = await call_next(request)
+    
+    # Check if this is a JSON response (use startswith to catch charset variations)
+    content_type = response.headers.get("content-type", "")
+    if content_type.startswith("application/json"):
+        try:
+            import json
+            from fastapi.responses import JSONResponse
+            
+            # Read response body
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+            
+            # Parse and sanitize
+            data = json.loads(body)
+            sanitized_data = sanitize_response_data(data)
+            
+            # Preserve important headers but exclude Content-Length (FastAPI will recalculate)
+            preserved_headers = {}
+            for key, value in response.headers.items():
+                if key.lower() not in ['content-length', 'content-type']:
+                    preserved_headers[key] = value
+            
+            # Return sanitized response with preserved headers
+            return JSONResponse(
+                content=sanitized_data,
+                status_code=response.status_code,
+                headers=preserved_headers
+            )
+        except Exception as e:
+            logger.error(f"Error in sanitize middleware: {e}")
+            # Return original response on error
+            from fastapi.responses import Response
+            return Response(
+                content=body if 'body' in locals() else b"",
+                status_code=response.status_code,
+                headers=dict(response.headers)
+            )
+    
+    return response
+
 # Mount static files
 try:
     app.mount("/static", StaticFiles(directory="webapp/static"), name="static")
@@ -137,6 +216,14 @@ async def health_check():
     }
 
 
+@app.get("/api/bot-info")
+async def get_bot_info():
+    """Get bot configuration info"""
+    return {
+        "bot_username": os.getenv("BOT_USERNAME", "VouchPortalBot")
+    }
+
+
 @app.post("/webhook")
 async def webhook(request: Request):
     """Handle Telegram webhook updates"""
@@ -162,10 +249,11 @@ async def get_users(limit: int = 100, offset: int = 0):
     try:
         users = await db.get_all_users(limit=limit, offset=offset)
 
-        # Enhance with rank info
+        # Enhance with rank info and sanitize profile URLs
         for user in users:
             user["rank_emoji"] = db.get_rank_emoji(user["rank"])
             user["rank_name"] = db.get_rank_name(user["rank"])
+            sanitize_user_profile_url(user)
 
         return {"users": users}
     except Exception as e:
@@ -181,6 +269,9 @@ async def get_profile(user_id: int):
         user = await db.get_user(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+
+        # Sanitize profile URL to prevent token leaks
+        sanitize_user_profile_url(user)
 
         # Get vouches
         vouches_received = await db.get_vouches_for_user(user_id)
@@ -307,6 +398,9 @@ async def update_profile(profile_update: ProfileUpdateRequest):
                 param_count += 1
             
             if profile_update.profile_picture_url is not None:
+                # Validate: only allow file_ids, reject URLs containing api.telegram.org
+                if "api.telegram.org" in profile_update.profile_picture_url:
+                    raise HTTPException(status_code=400, detail="Invalid profile picture URL. Use file_id only.")
                 updates.append(f"profile_picture_url = ${param_count}")
                 params.append(profile_update.profile_picture_url)
                 param_count += 1
@@ -322,14 +416,90 @@ async def update_profile(profile_update: ProfileUpdateRequest):
             if not updated_user:
                 raise HTTPException(status_code=404, detail="User not found")
             
+            user_dict = dict(updated_user)
+            # Sanitize response to prevent any token leaks
+            sanitize_user_profile_url(user_dict)
+            
             return {
                 "success": True,
-                "user": dict(updated_user)
+                "user": user_dict
             }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error updating profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/profile-photo/{user_id}")
+async def fetch_profile_photo_file_id(user_id: int):
+    """Fetch and cache user's Telegram profile photo file_id"""
+    try:
+        from bot import get_user_profile_photo_file_id
+        
+        # Check if we already have a cached file_id
+        user = await db.get_user(user_id)
+        if user and user.get("profile_picture_url"):
+            # profile_picture_url now stores file_id
+            return {
+                "success": True,
+                "file_id": user["profile_picture_url"],
+                "cached": True
+            }
+        
+        # Fetch from Telegram
+        file_id = await get_user_profile_photo_file_id(user_id)
+        
+        if file_id:
+            # Cache file_id in database (using profile_picture_url column)
+            pool = db._ensure_connected()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "UPDATE users SET profile_picture_url = $1 WHERE telegram_user_id = $2",
+                    file_id,
+                    user_id
+                )
+            
+            return {
+                "success": True,
+                "file_id": file_id,
+                "cached": False
+            }
+        else:
+            return {
+                "success": False,
+                "message": "No profile photo available"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error fetching profile photo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/photo-proxy/{file_id}")
+async def proxy_profile_photo(file_id: str):
+    """Proxy endpoint to serve Telegram profile photos without exposing bot token"""
+    try:
+        from bot import download_profile_photo_bytes
+        from fastapi.responses import Response
+        
+        # Download photo bytes from Telegram
+        photo_bytes = await download_profile_photo_bytes(file_id)
+        
+        if photo_bytes:
+            # Return image with appropriate headers
+            return Response(
+                content=photo_bytes,
+                media_type="image/jpeg",
+                headers={
+                    "Cache-Control": "public, max-age=86400"  # Cache for 24 hours
+                }
+            )
+        else:
+            raise HTTPException(status_code=404, detail="Photo not found")
+            
+    except Exception as e:
+        logger.error(f"Error proxying profile photo: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -422,10 +592,11 @@ async def get_leaderboard_by_type(board_type: str, limit: int = 20):
     try:
         leaderboard = await db.get_leaderboard(board_type, limit)
         
-        # Add rank info to each user
+        # Add rank info and sanitize profile URLs
         for user in leaderboard:
             user["rank_emoji"] = db.get_rank_emoji(user["rank"])
             user["rank_name"] = db.get_rank_name(user["rank"])
+            sanitize_user_profile_url(user)
         
         return {"leaderboard": leaderboard, "board_type": board_type}
     except Exception as e:
@@ -439,10 +610,11 @@ async def get_referral_stats(user_id: int):
     try:
         stats = await db.get_user_referral_stats(user_id)
         
-        # Add rank info to referrals
+        # Add rank info and sanitize profile URLs
         for referral in stats["recent_referrals"]:
             referral["rank_emoji"] = db.get_rank_emoji(referral["rank"])
             referral["rank_name"] = db.get_rank_name(referral["rank"])
+            sanitize_user_profile_url(referral)
         
         return stats
     except Exception as e:
@@ -507,10 +679,11 @@ async def search_users(q: str, limit: int = 20):
 
         result_users = [dict(u) for u in users]
 
-        # Add rank info
+        # Add rank info and sanitize profile URLs
         for user in result_users:
             user["rank_emoji"] = db.get_rank_emoji(user["rank"])
             user["rank_name"] = db.get_rank_name(user["rank"])
+            sanitize_user_profile_url(user)
 
         return {"users": result_users}
     except Exception as e:
@@ -523,6 +696,12 @@ async def get_leaderboard(period: str = "all"):
     """Get leaderboard data"""
     try:
         analytics = await db.get_analytics_summary()
+
+        # Sanitize profile URLs in leaderboard data
+        for user in analytics.get("most_vouched", []):
+            sanitize_user_profile_url(user)
+        for user in analytics.get("top_helpers", []):
+            sanitize_user_profile_url(user)
 
         return {
             "most_vouched": analytics["most_vouched"],
