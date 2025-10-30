@@ -367,7 +367,6 @@ body {
 
 .vouch-item.pending {
     opacity: 0.7;
-    border-left: 3px solid var(--accent-amber);
     border-left: 3px solid var(--accent-blue);
 }
 
