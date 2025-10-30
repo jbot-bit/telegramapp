@@ -37,10 +37,17 @@ class Database:
         if self.pool:
             await self.pool.close()
             logger.info("Database pool closed")
+    
+    def _ensure_connected(self) -> asyncpg.Pool:
+        """Ensure database pool is connected and return it (type guard)"""
+        if self.pool is None:
+            raise RuntimeError("Database pool not initialized. Call connect() first.")
+        return self.pool
 
     async def init_schema(self):
         """Create all necessary tables if they don't exist"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             # Users table
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -141,11 +148,12 @@ class Database:
             logger.info("Database schema initialized successfully")
 
     # User operations
-    async def get_or_create_user(self, telegram_user_id: int, username: str = None,
-                                  first_name: str = None, last_name: str = None,
-                                  referrer_id: int = None) -> Dict[str, Any]:
+    async def get_or_create_user(self, telegram_user_id: int, username: Optional[str] = None,
+                                  first_name: Optional[str] = None, last_name: Optional[str] = None,
+                                  referrer_id: Optional[int] = None) -> Dict[str, Any]:
         """Get user or create if doesn't exist"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             user = await conn.fetchrow(
                 "SELECT * FROM users WHERE telegram_user_id = $1",
                 telegram_user_id
@@ -190,7 +198,8 @@ class Database:
 
     async def get_user(self, telegram_user_id: int) -> Optional[Dict[str, Any]]:
         """Get user by telegram ID"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             user = await conn.fetchrow(
                 "SELECT * FROM users WHERE telegram_user_id = $1",
                 telegram_user_id
@@ -199,7 +208,8 @@ class Database:
 
     async def _process_pending_vouches(self, telegram_user_id: int, username: str):
         """Convert pending vouches to actual vouches when a user signs up or changes username"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             # Normalize username for case-insensitive matching
             username_normalized = username.lower() if username else None
             if not username_normalized:
@@ -253,7 +263,8 @@ class Database:
 
     async def get_all_users(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get all users with pagination"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             users = await conn.fetch(
                 "SELECT * FROM users ORDER BY total_vouches DESC LIMIT $1 OFFSET $2",
                 limit, offset
@@ -262,7 +273,8 @@ class Database:
 
     async def update_user_rank(self, telegram_user_id: int, new_rank: str) -> None:
         """Update user rank and log event"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             old_rank = await conn.fetchval(
                 "SELECT rank FROM users WHERE telegram_user_id = $1",
                 telegram_user_id
@@ -285,9 +297,10 @@ class Database:
             })
 
     # Vouch operations
-    async def create_vouch(self, from_user_id: int, to_user_id: int = None, to_username: str = None, message: str = None) -> Dict[str, Any]:
+    async def create_vouch(self, from_user_id: int, to_user_id: Optional[int] = None, to_username: Optional[str] = None, message: Optional[str] = None) -> Dict[str, Any]:
         """Create a new vouch - supports both existing users and pending vouches for users who haven't joined yet"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             # Normalize username (case-insensitive, remove @)
             if to_username:
                 to_username = to_username.replace("@", "").lower()
@@ -384,7 +397,8 @@ class Database:
 
     async def get_vouches_for_user(self, telegram_user_id: int) -> List[Dict[str, Any]]:
         """Get all vouches received by a user"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             vouches = await conn.fetch("""
                 SELECT v.*, u.username, u.first_name, u.rank
                 FROM vouches v
@@ -396,7 +410,8 @@ class Database:
 
     async def get_vouches_by_user(self, telegram_user_id: int) -> List[Dict[str, Any]]:
         """Get all vouches given by a user (including pending ones)"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             vouches = await conn.fetch("""
                 SELECT v.*, u.username, u.first_name, u.rank
                 FROM vouches v
@@ -407,9 +422,10 @@ class Database:
             return [dict(vouch) for vouch in vouches]
 
     # Analytics operations
-    async def log_event(self, event_type: str, user_id: int = None, metadata: Dict = None):
+    async def log_event(self, event_type: str, user_id: Optional[int] = None, metadata: Optional[Dict] = None):
         """Log an analytics event"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             # Convert metadata dict to JSON string for JSONB column
             metadata_json = json.dumps(metadata) if metadata else None
             await conn.execute("""
@@ -419,7 +435,8 @@ class Database:
 
     async def get_analytics_summary(self) -> Dict[str, Any]:
         """Get analytics summary for dashboard"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             # Total users
             total_users = await conn.fetchval("SELECT COUNT(*) FROM users")
 
@@ -488,7 +505,8 @@ class Database:
 
     async def can_send_invite(self, from_user_id: int, to_username: str) -> bool:
         """Check if invite can be sent (rate limiting)"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             recent_invite = await conn.fetchrow("""
                 SELECT * FROM invites
                 WHERE from_user_id = $1 AND to_username = $2
@@ -499,7 +517,8 @@ class Database:
 
     async def log_invite(self, from_user_id: int, to_username: str):
         """Log an invite sent"""
-        async with self.pool.acquire() as conn:
+        pool = self._ensure_connected()
+        async with pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO invites (from_user_id, to_username)
                 VALUES ($1, $2)
