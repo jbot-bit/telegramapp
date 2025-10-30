@@ -46,12 +46,14 @@ def sanitize_message(text: str) -> str:
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command"""
+    """Handle /start command - streamlined for quick access"""
     user = update.effective_user
     chat_id = update.effective_chat.id
 
-    # Parse referral code from deep link
+    # Parse deep link parameters
     referrer_id = None
+    direct_to_profile = None
+    
     if context.args:
         arg = context.args[0]
         if arg.startswith("ref_"):
@@ -60,17 +62,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except ValueError:
                 pass
         elif arg.startswith("profile_"):
-            # Direct to profile view
             try:
-                profile_id = int(arg.replace("profile_", ""))
-                webapp_url = f"{WEBHOOK_URL}?view=profile&id={profile_id}"
-                keyboard = [[InlineKeyboardButton("Open Profile", web_app=WebAppInfo(url=webapp_url))]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await update.message.reply_text(
-                    f"👋 View this user's profile:",
-                    reply_markup=reply_markup
-                )
-                return
+                direct_to_profile = int(arg.replace("profile_", ""))
             except ValueError:
                 pass
 
@@ -91,25 +84,36 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rank_emoji = db.get_rank_emoji(user_data["rank"])
     rank_name = db.get_rank_name(user_data["rank"])
 
-    # Create webapp button
-    webapp_url = WEBHOOK_URL
-    keyboard = [[InlineKeyboardButton("🤝 Open Vouch Portal", web_app=WebAppInfo(url=webapp_url))]]
+    # Determine webapp URL
+    if direct_to_profile:
+        webapp_url = f"{WEBHOOK_URL}?view=profile&id={direct_to_profile}"
+        button_text = "👀 View Profile"
+        message_intro = f"**Check out this profile!**\n\n"
+    else:
+        webapp_url = WEBHOOK_URL
+        button_text = "🚀 Open App"
+        message_intro = ""
+
+    # Single button to open app
+    keyboard = [[InlineKeyboardButton(button_text, web_app=WebAppInfo(url=webapp_url))]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # Simplified welcome message
+    if user_data['total_vouches'] == 0:
+        status_message = "🆕 **New Member** - Get your first vouch!"
+    else:
+        status_message = f"{rank_emoji} **{rank_name}** • {user_data['total_vouches']} vouches"
+
     welcome_message = f"""
-👋 Welcome to **Vouch Portal**, {user.first_name}!
+{message_intro}**Vouch Portal** 🤝
 
-Your current status:
-{rank_emoji} **{rank_name}**
-Vouches received: **{user_data['total_vouches']}**
+{status_message}
 
-Build trust through community vouches. Tap below to get started!
-
-_Community opinions only. Be respectful._
+{button_text} to start building trust!
 """
 
     await update.message.reply_text(
-        welcome_message,
+        welcome_message.strip(),
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
@@ -398,6 +402,51 @@ async def group_new_member_handler(update: Update, context: ContextTypes.DEFAULT
         )
 
 
+async def share_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get shareable profile link"""
+    user = update.effective_user
+    
+    # Get user data to show their stats
+    user_data = await db.get_user(user.id)
+    
+    # Create shareable link
+    share_link = f"https://t.me/{BOT_USERNAME}?start=profile_{user.id}"
+    
+    # Create webapp button
+    webapp_url = WEBHOOK_URL
+    keyboard = [[
+        InlineKeyboardButton("👀 View My Profile", web_app=WebAppInfo(url=webapp_url))
+    ]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if user_data:
+        rank_emoji = db.get_rank_emoji(user_data["rank"])
+        share_text = f"""
+**Your Profile Link:**
+`{share_link}`
+
+{rank_emoji} You have **{user_data['total_vouches']}** vouches
+
+Tap to copy the link above 👆
+Share it to let others vouch for you!
+"""
+    else:
+        share_text = f"""
+**Your Profile Link:**
+`{share_link}`
+
+Share this link to start receiving vouches!
+
+Tap to copy the link above 👆
+"""
+    
+    await update.message.reply_text(
+        share_text.strip(),
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+
 def setup_bot_handlers(application: Application):
     """Setup all bot command handlers"""
     # Command handlers
@@ -407,6 +456,7 @@ def setup_bot_handlers(application: Application):
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("leaderboard", leaderboard_command))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("share", share_command))
 
     # Callback query handler
     application.add_handler(CallbackQueryHandler(callback_query_handler))
